@@ -212,11 +212,6 @@ function generateArticle() {
 
 window.deleteProduct = async function(productId, btn) {
     if (!confirm('Удалить этот товар?')) return;
-    
-    if (window.currentUser.role !== 'owner') {
-        showError('Только владелец может удалять товары');
-        return;
-    }
 
     btn.disabled = true;
     btn.textContent = 'Удаление...';
@@ -260,7 +255,7 @@ document.getElementById('add-sale-btn').addEventListener('click', () => {
 
     const options = products
         .filter(p => p.stock > 0)
-        .map(p => `<option value="${p.id}">${p.name} (${p.size || '—'}) — Остаток: ${p.stock}</option>`)
+        .map(p => `<option value="${p.id}">${p.name} (${p.size || '–'}) – Остаток: ${p.stock}</option>`)
         .join('');
 
     const content = `
@@ -289,11 +284,6 @@ window.editSale = function(saleId) {
     const sale = sales.find(s => s.id === saleId);
     if (!sale || !sale.items) return;
 
-    if (window.currentUser.role !== 'owner') {
-        showError('Только владелец может редактировать продажи');
-        return;
-    }
-
     editingSaleId = saleId;
     currentSaleItems = sale.items.map(item => ({
         productId: item.productId,
@@ -308,7 +298,7 @@ window.editSale = function(saleId) {
     }));
 
     const allProducts = products.map(p => 
-        `<option value="${p.id}">${p.name} (${p.size || '—'}) — Остаток: ${p.stock + (sale.items.find(i => i.productId === p.id)?.quantity || 0)}</option>`
+        `<option value="${p.id}">${p.name} (${p.size || '–'}) – Остаток: ${p.stock + (sale.items.find(i => i.productId === p.id)?.quantity || 0)}</option>`
     ).join('');
 
     const content = `
@@ -362,7 +352,7 @@ window.addSaleItem = function() {
 
     currentSaleItems.push({
         productId: productId,
-        name: `${product.name} (${product.size || '—'})`,
+        name: `${product.name} (${product.size || '–'})`,
         maxStock: availableStock,
         quantity: 1,
         priceType: 'original',
@@ -596,11 +586,6 @@ window.updateSale = async function(saleId, btn) {
 
 window.deleteSale = async function(saleId, btn) {
     if (!confirm('Удалить эту продажу? Остатки товаров будут восстановлены.')) return;
-    
-    if (window.currentUser.role !== 'owner') {
-        showError('Только владелец может удалять продажи');
-        return;
-    }
 
     const sale = sales.find(s => s.id === saleId);
     if (!sale || !sale.items) return;
@@ -655,7 +640,7 @@ document.getElementById('add-income-btn').addEventListener('click', () => {
     
     let options = '';
     if (products.length > 0) {
-        options = products.map(p => `<option value="${p.id}">${p.name} (${p.size || '—'})</option>`).join('');
+        options = products.map(p => `<option value="${p.id}">${p.name} (${p.size || '–'})</option>`).join('');
     }
 
     const content = `
@@ -724,15 +709,10 @@ window.editIncome = async function(incomeId) {
     const incomeRecord = income.find(i => i.id === incomeId);
     if (!incomeRecord) return;
 
-    if (window.currentUser.role !== 'owner') {
-        showError('Только владелец может редактировать поступления');
-        return;
-    }
-
     editingIncomeId = incomeId;
 
     const options = products.map(p => 
-        `<option value="${p.id}" ${p.id === incomeRecord.productId ? 'selected' : ''}>${p.name} (${p.size || '—'})</option>`
+        `<option value="${p.id}" ${p.id === incomeRecord.productId ? 'selected' : ''}>${p.name} (${p.size || '–'})</option>`
     ).join('');
 
     const content = `
@@ -830,7 +810,7 @@ window.saveIncome = async function(btn) {
             window.firebaseFunctions.collection(window.firebaseDb, 'income'),
             {
                 productId: productId,
-                productName: product ? `${product.name} (${product.size || '—'})` : 'Новый товар',
+                productName: product ? `${product.name} (${product.size || '–'})` : 'Новый товар',
                 quantity: quantity,
                 cost: product ? product.cost : 0,
                 totalAmount: totalAmount,
@@ -894,7 +874,7 @@ window.updateIncome = async function(incomeId, btn) {
             window.firebaseFunctions.doc(window.firebaseDb, 'income', incomeId),
             {
                 productId: productId,
-                productName: `${product.name} (${product.size || '—'})`,
+                productName: `${product.name} (${product.size || '–'})`,
                 quantity: quantity,
                 cost: product.cost,
                 totalAmount: totalAmount

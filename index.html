@@ -9,7 +9,7 @@
 <body>
     <div id="auth-screen" class="screen active">
         <div class="auth-container">
-            <h1>Мерч!</h1>
+            <img src="imgs/logo.png" alt="Мерч!" class="auth-logo">
             <p class="subtitle">Система учёта товаров</p>
             
             <form id="login-form" class="auth-form active">
@@ -31,17 +31,17 @@
             </button>
             
             <div class="topbar-left">
-                <h2 class="logo">Мерч!</h2>
+                <img src="imgs/logo.png" alt="Мерч!" class="topbar-logo">
                 <span id="user-role" class="role-badge"></span>
             </div>
             <div class="topbar-center">
                 <ul class="nav-menu">
-                    <li><a href="#" data-section="dashboard" class="nav-link active">📊 Дашборд</a></li>
-                    <li><a href="#" data-section="products" class="nav-link">👕 Товары</a></li>
-                    <li><a href="#" data-section="income" class="nav-link">📦 Поступления</a></li>
-                    <li><a href="#" data-section="sales" class="nav-link">💰 Продажи</a></li>
-                    <li><a href="#" data-section="plans" class="nav-link" id="plans-link">🎯 Планы</a></li>
-                    <li><a href="#" data-section="users" class="nav-link" id="users-link">👥 Пользователи</a></li>
+                    <li><a href="#" data-section="dashboard" class="nav-link"><img src="imgs/analysis.png" alt="" class="nav-icon"> Дашборд</a></li>
+                    <li><a href="#" data-section="products" class="nav-link"><img src="imgs/clothes.png" alt="" class="nav-icon"> Товары</a></li>
+                    <li><a href="#" data-section="income" class="nav-link"><img src="imgs/package.png" alt="" class="nav-icon"> Поступления</a></li>
+                    <li><a href="#" data-section="sales" class="nav-link"><img src="imgs/pay.png" alt="" class="nav-icon"> Продажи</a></li>
+                    <li><a href="#" data-section="plans" class="nav-link" id="plans-link"><img src="imgs/dart.png" alt="" class="nav-icon"> Планы</a></li>
+                    <li><a href="#" data-section="users" class="nav-link" id="users-link"><img src="imgs/employee.png" alt="" class="nav-icon"> Пользователи</a></li>
                 </ul>
             </div>
             <div class="topbar-right">
@@ -56,16 +56,16 @@
         <div class="mobile-menu-overlay" id="mobile-menu-overlay"></div>
         <aside class="mobile-menu" id="mobile-menu">
             <div class="mobile-menu-header">
-                <h3>Меню</h3>
+                <img src="imgs/logo.png" alt="Мерч!" class="mobile-menu-logo">
                 <button class="mobile-menu-close" id="mobile-menu-close">&times;</button>
             </div>
             <ul class="mobile-nav-menu">
-                <li><a href="#" data-section="dashboard" class="mobile-nav-link active">📊 Дашборд</a></li>
-                <li><a href="#" data-section="products" class="mobile-nav-link">👕 Товары</a></li>
-                <li><a href="#" data-section="income" class="mobile-nav-link">📦 Поступления</a></li>
-                <li><a href="#" data-section="sales" class="mobile-nav-link">💰 Продажи</a></li>
-                <li id="mobile-plans-link"><a href="#" data-section="plans" class="mobile-nav-link">🎯 Планы</a></li>
-                <li id="mobile-users-link"><a href="#" data-section="users" class="mobile-nav-link">👥 Пользователи</a></li>
+                <li><a href="#" data-section="dashboard" class="mobile-nav-link"><img src="imgs/analysis.png" alt="" class="nav-icon"> Дашборд</a></li>
+                <li><a href="#" data-section="products" class="mobile-nav-link"><img src="imgs/clothes.png" alt="" class="nav-icon"> Товары</a></li>
+                <li><a href="#" data-section="income" class="mobile-nav-link"><img src="imgs/package.png" alt="" class="nav-icon"> Поступления</a></li>
+                <li><a href="#" data-section="sales" class="mobile-nav-link"><img src="imgs/pay.png" alt="" class="nav-icon"> Продажи</a></li>
+                <li id="mobile-plans-link"><a href="#" data-section="plans" class="mobile-nav-link"><img src="imgs/dart.png" alt="" class="nav-icon"> Планы</a></li>
+                <li id="mobile-users-link"><a href="#" data-section="users" class="mobile-nav-link"><img src="imgs/employee.png" alt="" class="nav-icon"> Пользователи</a></li>
             </ul>
             <div class="mobile-menu-footer">
                 <button class="theme-toggle-mobile" id="theme-toggle-mobile">
@@ -76,8 +76,38 @@
         </aside>
 
         <main class="main-content">
+            <!-- Welcome экран -->
+            <section id="welcome-section" class="content-section active">
+                <div class="welcome-container">
+                    <h2 class="welcome-title">Добро пожаловать, <span id="welcome-username"></span>!</h2>
+                    <p class="welcome-subtitle">Выберите любой раздел меню для продолжения работы</p>
+                    <div class="welcome-grid">
+                        <div class="welcome-card" onclick="switchSection('dashboard')">
+                            <img src="imgs/analysis.png" alt="Дашборд" class="welcome-icon">
+                            <h3>Дашборд</h3>
+                            <p>Аналитика и графики</p>
+                        </div>
+                        <div class="welcome-card" onclick="switchSection('products')">
+                            <img src="imgs/clothes.png" alt="Товары" class="welcome-icon">
+                            <h3>Товары</h3>
+                            <p>Управление каталогом</p>
+                        </div>
+                        <div class="welcome-card" onclick="switchSection('sales')">
+                            <img src="imgs/pay.png" alt="Продажи" class="welcome-icon">
+                            <h3>Продажи</h3>
+                            <p>Журнал продаж</p>
+                        </div>
+                        <div class="welcome-card" onclick="switchSection('income')">
+                            <img src="imgs/package.png" alt="Поступления" class="welcome-icon">
+                            <h3>Поступления</h3>
+                            <p>Приёмка товара</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- Дашборд -->
-            <section id="dashboard-section" class="content-section active">
+            <section id="dashboard-section" class="content-section">
                 <h2>Дашборд</h2>
                 
                 <h3 class="dashboard-subtitle">Продажи</h3>
@@ -146,7 +176,7 @@
                     </div>
                     <div class="stat-card">
                         <h3>Последнее поступление</h3>
-                        <p class="stat-value-small" id="last-income">—</p>
+                        <p class="stat-value-small" id="last-income">–</p>
                     </div>
                     <div class="stat-card">
                         <h3>Всего позиций</h3>

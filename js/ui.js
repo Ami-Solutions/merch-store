@@ -20,7 +20,7 @@ let currentDistributionType = 'category';
 
 function getGenderLabel(gender) {
     const labels = { male: 'Мужское', female: 'Женское', unisex: 'Унисекс' };
-    return labels[gender] || '—';
+    return labels[gender] || '–';
 }
 
 function renderProducts() {
@@ -31,18 +31,17 @@ function renderProducts() {
         <tr>
             <td>${product.article}</td>
             <td>${product.name}</td>
-            <td>${product.category || '—'}</td>
-            <td>${product.brand || '—'}</td>
+            <td>${product.category || '–'}</td>
+            <td>${product.brand || '–'}</td>
             <td>${getGenderLabel(product.gender)}</td>
-            <td>${product.size || '—'}</td>
-            <td>${product.cost ? formatCurrency(product.cost) : '—'}</td>
-            <td>${product.price ? formatCurrency(product.price) : '—'}</td>
-            <td>${product.discount > 0 ? formatCurrency(product.discount) : '—'}</td>
+            <td>${product.size || '–'}</td>
+            <td>${product.cost ? formatCurrency(product.cost) : '–'}</td>
+            <td>${product.price ? formatCurrency(product.price) : '–'}</td>
+            <td>${product.discount > 0 ? formatCurrency(product.discount) : '–'}</td>
             <td>${product.stock}</td>
             <td>
                 <button class="action-btn edit" onclick="editProduct('${product.id}')">Изменить</button>
-                ${window.currentUser && window.currentUser.role === 'owner' ? 
-                    `<button class="action-btn delete" onclick="deleteProduct('${product.id}', this)">Удалить</button>` : ''}
+                <button class="action-btn delete" onclick="deleteProduct('${product.id}', this)">Удалить</button>
             </td>
         </tr>
     `).join('');
@@ -57,7 +56,7 @@ function renderSales() {
     tbody.innerHTML = filtered.map(sale => {
         const itemsHtml = sale.items ? sale.items.map(item => 
             `<div>• ${item.productName} × ${item.quantity} = ${formatCurrency(item.total)}</div>`
-        ).join('') : '<div>—</div>';
+        ).join('') : '<div>–</div>';
 
         return `
             <tr>
@@ -67,8 +66,7 @@ function renderSales() {
                 <td>${sale.seller}</td>
                 <td>
                     <button class="action-btn edit" onclick="editSale('${sale.id}')">Изменить</button>
-                    ${window.currentUser && window.currentUser.role === 'owner' ? 
-                        `<button class="action-btn delete" onclick="deleteSale('${sale.id}', this)">Удалить</button>` : ''}
+                    <button class="action-btn delete" onclick="deleteSale('${sale.id}', this)">Удалить</button>
                 </td>
             </tr>
         `;
@@ -87,8 +85,7 @@ function renderIncome() {
             <td>${formatCurrency(item.totalAmount)}</td>
             <td>
                 <button class="action-btn edit" onclick="editIncome('${item.id}')">Изменить</button>
-                ${window.currentUser && window.currentUser.role === 'owner' ? 
-                    `<button class="action-btn delete" onclick="deleteIncome('${item.id}', this)">Удалить</button>` : ''}
+                <button class="action-btn delete" onclick="deleteIncome('${item.id}', this)">Удалить</button>
             </td>
         </tr>
     `).join('');
@@ -116,7 +113,7 @@ function renderPlans() {
             <tr>
                 <td>
                     ${plan.name}<br>
-                    <small style="color: var(--text-secondary)">${formatDateShort(plan.startDate)} — ${formatDateShort(plan.endDate)}</small>
+                    <small style="color: var(--text-secondary)">${formatDateShort(plan.startDate)} – ${formatDateShort(plan.endDate)}</small>
                 </td>
                 <td>${formatCurrency(plan.targetAmount)}</td>
                 <td>${formatCurrency(fact)}</td>
@@ -130,8 +127,7 @@ function renderPlans() {
                 </td>
                 <td>
                     <button class="action-btn edit" onclick="editPlan('${plan.id}')">Изменить</button>
-                    ${window.currentUser.role === 'owner' ? 
-                        `<button class="action-btn delete" onclick="deletePlan('${plan.id}', this)">Удалить</button>` : ''}
+                    <button class="action-btn delete" onclick="deletePlan('${plan.id}', this)">Удалить</button>
                 </td>
             </tr>
         `;
@@ -194,7 +190,7 @@ function renderPlanCard(plan, fact, percent, isCurrent) {
                 </span>
             </div>
             <div class="plan-card-period">
-                ${formatDateShort(plan.startDate)} — ${formatDateShort(plan.endDate)}
+                ${formatDateShort(plan.startDate)} – ${formatDateShort(plan.endDate)}
             </div>
             <div class="plan-card-progress">
                 <div class="plan-card-progress-bar">
@@ -291,7 +287,7 @@ function updateDashboard() {
             new Date(current.date) > new Date(latest.date) ? current : latest
         );
         document.getElementById('last-income').textContent = 
-            formatDate(lastIncome.date) + ' — ' + lastIncome.productName;
+            formatDate(lastIncome.date) + ' – ' + lastIncome.productName;
     } else {
         document.getElementById('last-income').textContent = 'Нет поступлений';
     }

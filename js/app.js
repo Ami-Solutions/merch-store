@@ -133,6 +133,9 @@ async function showApp(user) {
     
     await loadUserData(user);
     
+    // Устанавливаем имя пользователя в welcome экран
+    document.getElementById('welcome-username').textContent = window.currentUser.name || 'пользователь';
+    
     // Загружаем все данные параллельно
     await Promise.all([
         loadProducts(),
@@ -141,10 +144,7 @@ async function showApp(user) {
         loadPlans()
     ]);
     
-    // Обновляем дашборд с небольшой задержкой для корректного рендера графиков
-    setTimeout(() => {
-        updateDashboard();
-    }, 150);
+    // Остаёмся на welcome экране - пользователь сам выберет раздел
 }
 
 function switchSection(sectionName) {
@@ -169,10 +169,7 @@ function switchSection(sectionName) {
     document.getElementById(`${sectionName}-section`).classList.add('active');
 
     if (sectionName === 'dashboard') {
-        // Небольшая задержка, чтобы секция успела стать видимой
-        setTimeout(() => {
-            updateDashboard();
-        }, 50);
+        updateDashboard();
     }
 }
 
