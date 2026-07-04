@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мерч! - Учёт товаров</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="auth-screen" class="screen active">
+        <div class="auth-container">
+            <h1>Мерч!</h1>
+            <p class="subtitle">Система учёта товаров</p>
+            
+            <form id="login-form" class="auth-form active">
+                <input type="email" id="login-email" placeholder="Email" required>
+                <input type="password" id="login-password" placeholder="Пароль" required>
+                <button type="submit" class="btn-primary">Войти</button>
+            </form>
+
+            <div id="auth-error" class="error-message"></div>
+        </div>
+    </div>
+
+    <div id="app-screen" class="screen">
+        <nav class="topbar">
+            <div class="topbar-left">
+                <h2 class="logo">Мерч!</h2>
+                <span id="user-role" class="role-badge"></span>
+            </div>
+            <div class="topbar-center">
+                <ul class="nav-menu">
+                    <li><a href="#" data-section="dashboard" class="nav-link active">📊 Дашборд</a></li>
+                    <li><a href="#" data-section="products" class="nav-link">👕 Товары</a></li>
+                    <li><a href="#" data-section="income" class="nav-link">📦 Поступления</a></li>
+                    <li><a href="#" data-section="sales" class="nav-link">💰 Продажи</a></li>
+                    <li><a href="#" data-section="plans" class="nav-link" id="plans-link">🎯 Планы</a></li>
+                    <li><a href="#" data-section="users" class="nav-link" id="users-link">👥 Пользователи</a></li>
+                </ul>
+            </div>
+            <div class="topbar-right">
+                <button id="logout-btn" class="btn-secondary">Выйти</button>
+            </div>
+        </nav>
+
+        <main class="main-content">
+            <!-- Дашборд -->
+            <section id="dashboard-section" class="content-section active">
+                <h2>Дашборд</h2>
+                
+                <h3 class="dashboard-subtitle">Продажи</h3>
+                <div class="stats-controls">
+                    <select id="sales-period-selector" class="chart-filter">
+                        <option value="7">7 дней</option>
+                        <option value="30">30 дней</option>
+                        <option value="90">3 месяца</option>
+                        <option value="custom">Свой период</option>
+                    </select>
+                </div>
+                <div id="sales-custom-period" class="custom-period" style="display: none;">
+                    <input type="date" id="sales-period-start">
+                    <input type="date" id="sales-period-end">
+                    <button class="btn-small" onclick="applySalesCustomPeriod()">Применить</button>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Продажи за период</h3>
+                        <p class="stat-value" id="period-sales">0 ₽</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Количество продаж</h3>
+                        <p class="stat-value" id="period-sales-count">0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Максимальная продажа</h3>
+                        <p class="stat-value" id="period-max-sale">0 ₽</p>
+                    </div>
+                </div>
+
+                <h3 class="dashboard-subtitle">Средний чек</h3>
+                <div class="stats-controls">
+                    <select id="avg-period-selector" class="chart-filter">
+                        <option value="7">7 дней</option>
+                        <option value="30">30 дней</option>
+                        <option value="90">3 месяца</option>
+                        <option value="custom">Свой период</option>
+                    </select>
+                </div>
+                <div id="avg-custom-period" class="custom-period" style="display: none;">
+                    <input type="date" id="avg-period-start">
+                    <input type="date" id="avg-period-end">
+                    <button class="btn-small" onclick="applyAvgCustomPeriod()">Применить</button>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Средний чек за период</h3>
+                        <p class="stat-value" id="period-avg">0 ₽</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Медианный чек</h3>
+                        <p class="stat-value" id="period-median">0 ₽</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Минимальный чек</h3>
+                        <p class="stat-value" id="period-min-check">0 ₽</p>
+                    </div>
+                </div>
+
+                <h3 class="dashboard-subtitle">Склад и поступления</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Всего товаров сейчас</h3>
+                        <p class="stat-value" id="total-stock">0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Последнее поступление</h3>
+                        <p class="stat-value-small" id="last-income">—</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Всего позиций</h3>
+                        <p class="stat-value" id="total-products">0</p>
+                    </div>
+                </div>
+
+                <h3 class="dashboard-subtitle">Планы продаж</h3>
+                <div class="plans-overview" id="plans-overview">
+                    <div class="plan-card-empty">Нет активных планов</div>
+                </div>
+
+                <h3 class="dashboard-subtitle">Аналитика</h3>
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3>Топ товаров</h3>
+                            <select id="top-products-filter" class="chart-filter">
+                                <option value="5">Топ-5</option>
+                                <option value="10">Топ-10</option>
+                            </select>
+                        </div>
+                        <canvas id="top-products-chart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3>Продажи</h3>
+                            <div class="period-controls">
+                                <select id="sales-chart-period-filter" class="chart-filter">
+                                    <option value="7">7 дней</option>
+                                    <option value="30">30 дней</option>
+                                    <option value="90">3 месяца</option>
+                                    <option value="custom">Свой период</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="sales-chart-custom-period" class="custom-period" style="display: none;">
+                            <input type="date" id="sales-chart-period-start">
+                            <input type="date" id="sales-chart-period-end">
+                            <button class="btn-small" onclick="applySalesChartCustomPeriod()">Применить</button>
+                        </div>
+                        <canvas id="sales-chart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3>Распределение товаров</h3>
+                            <select id="distribution-type-selector" class="chart-filter">
+                                <option value="category">По категориям</option>
+                                <option value="price">По цене</option>
+                                <option value="gender">По полу</option>
+                            </select>
+                        </div>
+                        <canvas id="distribution-chart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Товары -->
+            <section id="products-section" class="content-section">
+                <div class="section-header">
+                    <h2>Товары</h2>
+                    <button class="btn-primary" id="add-product-btn">+ Добавить товар</button>
+                </div>
+                
+                <div class="filters-container">
+                    <div class="filter-group">
+                        <label>Поиск по названию</label>
+                        <input type="text" id="product-search" placeholder="Введите название..." class="filter-input">
+                    </div>
+                    <div class="filter-group">
+                        <label>Категория</label>
+                        <select id="product-category-filter" class="filter-select">
+                            <option value="">Все категории</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Пол</label>
+                        <select id="product-gender-filter" class="filter-select">
+                            <option value="">Все</option>
+                            <option value="male">Мужское</option>
+                            <option value="female">Женское</option>
+                            <option value="unisex">Унисекс</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Бренд</label>
+                        <select id="product-brand-filter" class="filter-select">
+                            <option value="">Все бренды</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Размер</label>
+                        <select id="product-size-filter" class="filter-select">
+                            <option value="">Все размеры</option>
+                        </select>
+                    </div>
+                    <div class="filter-group filter-group-wide">
+                        <label>Цена продажи: <span id="product-price-range-label">0 - 10000 ₽</span></label>
+                        <div class="range-slider">
+                            <input type="range" id="product-price-min" min="0" max="10000" value="0" step="100">
+                            <input type="range" id="product-price-max" min="0" max="10000" value="10000" step="100">
+                        </div>
+                    </div>
+                    <button class="btn-secondary btn-reset-filters" onclick="resetProductFilters()">Сбросить</button>
+                </div>
+
+                <div class="table-container">
+                    <table id="products-table">
+                        <thead>
+                            <tr>
+                                <th>Артикул</th>
+                                <th>Название</th>
+                                <th>Категория</th>
+                                <th>Бренд</th>
+                                <th>Пол</th>
+                                <th>Размер</th>
+                                <th>Цена закупки</th>
+                                <th>Цена продажи</th>
+                                <th>Скидка</th>
+                                <th>Остаток</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="products-tbody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Поступления -->
+            <section id="income-section" class="content-section">
+                <div class="section-header">
+                    <h2>Поступления</h2>
+                    <button class="btn-primary" id="add-income-btn">+ Добавить поступление</button>
+                </div>
+
+                <div class="filters-container">
+                    <div class="filter-group">
+                        <label>Поиск по товару</label>
+                        <input type="text" id="income-search" placeholder="Введите название..." class="filter-input">
+                    </div>
+                    <div class="filter-group">
+                        <label>Дата с</label>
+                        <input type="date" id="income-date-from" class="filter-input">
+                    </div>
+                    <div class="filter-group">
+                        <label>Дата по</label>
+                        <input type="date" id="income-date-to" class="filter-input">
+                    </div>
+                    <div class="filter-group filter-group-wide">
+                        <label>Сумма: <span id="income-amount-range-label">0 - 100000 ₽</span></label>
+                        <div class="range-slider">
+                            <input type="range" id="income-amount-min" min="0" max="100000" value="0" step="100">
+                            <input type="range" id="income-amount-max" min="0" max="100000" value="100000" step="100">
+                        </div>
+                    </div>
+                    <button class="btn-secondary btn-reset-filters" onclick="resetIncomeFilters()">Сбросить</button>
+                </div>
+
+                <div class="table-container">
+                    <table id="income-table">
+                        <thead>
+                            <tr>
+                                <th>Дата</th>
+                                <th>Товар</th>
+                                <th>Количество</th>
+                                <th>Сумма</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="income-tbody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Продажи -->
+            <section id="sales-section" class="content-section">
+                <div class="section-header">
+                    <h2>Продажи</h2>
+                    <button class="btn-primary" id="add-sale-btn">+ Добавить продажу</button>
+                </div>
+
+                <div class="filters-container">
+                    <div class="filter-group">
+                        <label>Поиск по товару</label>
+                        <input type="text" id="sales-search" placeholder="Введите название..." class="filter-input">
+                    </div>
+                    <div class="filter-group">
+                        <label>Дата с</label>
+                        <input type="date" id="sales-date-from" class="filter-input">
+                    </div>
+                    <div class="filter-group">
+                        <label>Дата по</label>
+                        <input type="date" id="sales-date-to" class="filter-input">
+                    </div>
+                    <div class="filter-group">
+                        <label>Продавец</label>
+                        <select id="sales-seller-filter" class="filter-select">
+                            <option value="">Все продавцы</option>
+                        </select>
+                    </div>
+                    <div class="filter-group filter-group-wide">
+                        <label>Сумма: <span id="sales-amount-range-label">0 - 100000 ₽</span></label>
+                        <div class="range-slider">
+                            <input type="range" id="sales-amount-min" min="0" max="100000" value="0" step="100">
+                            <input type="range" id="sales-amount-max" min="0" max="100000" value="100000" step="100">
+                        </div>
+                    </div>
+                    <button class="btn-secondary btn-reset-filters" onclick="resetSalesFilters()">Сбросить</button>
+                </div>
+
+                <div class="table-container">
+                    <table id="sales-table">
+                        <thead>
+                            <tr>
+                                <th>Дата</th>
+                                <th>Товары</th>
+                                <th>Сумма</th>
+                                <th>Продавец</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sales-tbody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Планы -->
+            <section id="plans-section" class="content-section">
+                <div class="section-header">
+                    <h2>Планы продаж</h2>
+                    <button class="btn-primary" id="add-plan-btn">+ Установить план</button>
+                </div>
+
+                <div class="filters-container">
+                    <div class="filter-group">
+                        <label>Название плана</label>
+                        <input type="text" id="plan-search" placeholder="Введите название..." class="filter-input">
+                    </div>
+                    <div class="filter-group">
+                        <label>Дата с</label>
+                        <input type="date" id="plan-date-from" class="filter-input">
+                    </div>
+                    <div class="filter-group">
+                        <label>Дата по</label>
+                        <input type="date" id="plan-date-to" class="filter-input">
+                    </div>
+                    <button class="btn-secondary btn-reset-filters" onclick="resetPlanFilters()">Сбросить</button>
+                </div>
+
+                <div class="table-container">
+                    <table id="plans-table">
+                        <thead>
+                            <tr>
+                                <th>Период</th>
+                                <th>План</th>
+                                <th>Факт</th>
+                                <th>Выполнение</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="plans-tbody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Пользователи -->
+            <section id="users-section" class="content-section">
+                <div class="section-header">
+                    <h2>Пользователи</h2>
+                    <button class="btn-primary" id="add-user-btn">+ Добавить сотрудника</button>
+                </div>
+                <div class="table-container">
+                    <table id="users-table">
+                        <thead>
+                            <tr>
+                                <th>Имя</th>
+                                <th>Email</th>
+                                <th>Роль</th>
+                                <th>Дата регистрации</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="users-tbody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div id="modal-overlay" class="modal-overlay">
+        <div class="modal modal-wide">
+            <div class="modal-header">
+                <h3 id="modal-title"></h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-analytics.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAR0Fbs8d6zGcK3WiWB6VD8WCxs3OhfuPY",
+            authDomain: "merch-store-78308.firebaseapp.com",
+            projectId: "merch-store-78308",
+            storageBucket: "merch-store-78308.firebasestorage.app",
+            messagingSenderId: "721984298807",
+            appId: "1:721984298807:web:854f362025debaa2f184b2",
+            measurementId: "G-723S9M6B65"
+        };
+
+        window.firebaseConfig = firebaseConfig;
+
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        window.firebaseAuth = auth;
+        window.firebaseDb = db;
+        window.firebaseFunctions = {
+            initializeApp,
+            getAuth,
+            createUserWithEmailAndPassword,
+            signInWithEmailAndPassword,
+            signOut,
+            onAuthStateChanged,
+            collection,
+            addDoc,
+            getDocs,
+            doc,
+            updateDoc,
+            deleteDoc,
+            query,
+            where,
+            orderBy,
+            onSnapshot
+        };
+    </script>
+
+    <script src="js/auth.js"></script>
+    <script src="js/database.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

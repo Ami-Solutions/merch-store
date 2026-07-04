@@ -1,0 +1,17 @@
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Логи
+*.log
+npm-debug.log*
+
+# Временные файлы
+*.swp
+*.tmp
