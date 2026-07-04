@@ -3,6 +3,8 @@ let sales = [];
 let income = [];
 let plans = [];
 let currentSaleItems = [];
+let editingSaleId = null;
+let editingIncomeId = null;
 
 // Фильтры
 let productFilters = {
@@ -20,7 +22,7 @@ let incomeFilters = {
     dateFrom: '',
     dateTo: '',
     amountMin: 0,
-    amountMax: 100000
+    amountMax: 1000000
 };
 
 let salesFilters = {
@@ -29,7 +31,7 @@ let salesFilters = {
     dateTo: '',
     seller: '',
     amountMin: 0,
-    amountMax: 100000
+    amountMax: 1000000
 };
 
 let planFilters = {
@@ -83,12 +85,51 @@ document.getElementById('add-product-btn').addEventListener('click', () => {
         <label>Цена по скидке</label>
         <input type="number" id="product-discount" value="0">
         
-        <button class="btn-primary" onclick="saveProduct()">Сохранить</button>
+        <button class="btn-primary" onclick="saveProduct(this)">Сохранить</button>
     `;
     openModal('Добавить товар', content);
 });
 
-window.saveProduct = async function() {
+window.editProduct = function(productId) {
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+
+    const content = `
+        <label>Название (обязательно)</label>
+        <input type="text" id="product-name" value="${product.name || ''}" required>
+        
+        <label>Категория</label>
+        <input type="text" id="product-category" value="${product.category || ''}">
+        
+        <label>Бренд</label>
+        <input type="text" id="product-brand" value="${product.brand || ''}">
+        
+        <label>Пол</label>
+        <select id="product-gender">
+            <option value="" ${!product.gender ? 'selected' : ''}>Не указан</option>
+            <option value="male" ${product.gender === 'male' ? 'selected' : ''}>Мужское</option>
+            <option value="female" ${product.gender === 'female' ? 'selected' : ''}>Женское</option>
+            <option value="unisex" ${product.gender === 'unisex' ? 'selected' : ''}>Унисекс</option>
+        </select>
+        
+        <label>Размер</label>
+        <input type="text" id="product-size" value="${product.size || ''}">
+        
+        <label>Цена закупки</label>
+        <input type="number" id="product-cost" value="${product.cost || ''}">
+        
+        <label>Цена продажи</label>
+        <input type="number" id="product-price" value="${product.price || ''}">
+        
+        <label>Цена по скидке</label>
+        <input type="number" id="product-discount" value="${product.discount || 0}">
+        
+        <button class="btn-primary" onclick="updateProduct('${productId}', this)">Сохранить изменения</button>
+    `;
+    openModal('Редактировать товар', content);
+};
+
+window.saveProduct = async function(btn) {
     const name = document.getElementById('product-name').value;
     
     if (!name) {
@@ -106,6 +147,9 @@ window.saveProduct = async function() {
 
     const article = generateArticle();
 
+    btn.disabled = true;
+    btn.textContent = 'Сохранение...';
+
     try {
         await window.firebaseFunctions.addDoc(
             window.firebaseFunctions.collection(window.firebaseDb, 'products'),
@@ -121,20 +165,61 @@ window.saveProduct = async function() {
     } catch (error) {
         showError('Ошибка при сохранении товара');
         console.error(error);
+        btn.disabled = false;
+        btn.textContent = 'Сохранить';
+    }
+};
+
+window.updateProduct = async function(productId, btn) {
+    const name = document.getElementById('product-name').value;
+    
+    if (!name) {
+        showError('Название обязательно');
+        return;
+    }
+
+    const category = document.getElementById('product-category').value || '';
+    const brand = document.getElementById('product-brand').value || '';
+    const gender = document.getElementById('product-gender').value || '';
+    const size = document.getElementById('product-size').value || '';
+    const cost = parseFloat(document.getElementById('product-cost').value) || 0;
+    const price = parseFloat(document.getElementById('product-price').value) || 0;
+    const discount = parseFloat(document.getElementById('product-discount').value) || 0;
+
+    btn.disabled = true;
+    btn.textContent = 'Сохранение...';
+
+    try {
+        await window.firebaseFunctions.updateDoc(
+            window.firebaseFunctions.doc(window.firebaseDb, 'products', productId),
+            { name, category, brand, gender, size, cost, price, discount }
+        );
+        
+        closeModal();
+        await loadProducts();
+        updateDashboard();
+    } catch (error) {
+        showError('Ошибка при обновлении товара');
+        console.error(error);
+        btn.disabled = false;
+        btn.textContent = 'Сохранить изменения';
     }
 };
 
 function generateArticle() {
-    return 'ART' + Date.now().toString().slice(-6);
+    return Date.now().toString().slice(-6);
 }
 
-window.deleteProduct = async function(productId) {
+window.deleteProduct = async function(productId, btn) {
     if (!confirm('Удалить этот товар?')) return;
     
     if (window.currentUser.role !== 'owner') {
         showError('Только владелец может удалять товары');
         return;
     }
+
+    btn.disabled = true;
+    btn.textContent = 'Удаление...';
 
     try {
         await window.firebaseFunctions.deleteDoc(
@@ -143,6 +228,8 @@ window.deleteProduct = async function(productId) {
         await loadProducts();
     } catch (error) {
         showError('Ошибка при удалении');
+        btn.disabled = false;
+        btn.textContent = 'Удалить';
     }
 };
 
@@ -162,6 +249,8 @@ async function loadSales() {
 }
 
 document.getElementById('add-sale-btn').addEventListener('click', () => {
+    editingSaleId = null;
+    
     if (products.length === 0) {
         showError('Сначала добавьте товары');
         return;
@@ -191,10 +280,57 @@ document.getElementById('add-sale-btn').addEventListener('click', () => {
             Итого: <span id="sale-total-amount">0 ₽</span>
         </div>
 
-        <button class="btn-primary" onclick="saveSale()">Оформить продажу</button>
+        <button class="btn-primary" onclick="saveSale(this)">Оформить продажу</button>
     `;
     openModal('Добавить продажу', content);
 });
+
+window.editSale = function(saleId) {
+    const sale = sales.find(s => s.id === saleId);
+    if (!sale || !sale.items) return;
+
+    if (window.currentUser.role !== 'owner') {
+        showError('Только владелец может редактировать продажи');
+        return;
+    }
+
+    editingSaleId = saleId;
+    currentSaleItems = sale.items.map(item => ({
+        productId: item.productId,
+        name: item.productName,
+        maxStock: 999999,
+        quantity: item.quantity,
+        priceType: item.priceType || 'original',
+        originalPrice: products.find(p => p.id === item.productId)?.price || item.price,
+        discountPrice: products.find(p => p.id === item.productId)?.discount || 0,
+        customPrice: item.price,
+        finalPrice: item.price
+    }));
+
+    const allProducts = products.map(p => 
+        `<option value="${p.id}">${p.name} (${p.size || '—'}) — Остаток: ${p.stock + (sale.items.find(i => i.productId === p.id)?.quantity || 0)}</option>`
+    ).join('');
+
+    const content = `
+        <label>Добавить товар в продажу</label>
+        <select id="sale-product-select">
+            <option value="">-- Выберите товар --</option>
+            ${allProducts}
+        </select>
+        <button class="btn-small" style="width: 100%; margin-bottom: 16px;" onclick="addSaleItem()">+ Добавить в корзину</button>
+
+        <label>Корзина</label>
+        <div class="sale-cart" id="sale-cart"></div>
+
+        <div class="sale-total">
+            Итого: <span id="sale-total-amount">0 ₽</span>
+        </div>
+
+        <button class="btn-primary" onclick="updateSale('${saleId}', this)">Сохранить изменения</button>
+    `;
+    openModal('Редактировать продажу', content);
+    renderSaleCart();
+};
 
 window.addSaleItem = function() {
     const select = document.getElementById('sale-product-select');
@@ -213,10 +349,21 @@ window.addSaleItem = function() {
         return;
     }
 
+    let availableStock = product.stock;
+    if (editingSaleId) {
+        const oldSale = sales.find(s => s.id === editingSaleId);
+        if (oldSale) {
+            const oldItem = oldSale.items.find(i => i.productId === productId);
+            if (oldItem) {
+                availableStock += oldItem.quantity;
+            }
+        }
+    }
+
     currentSaleItems.push({
         productId: productId,
         name: `${product.name} (${product.size || '—'})`,
-        maxStock: product.stock,
+        maxStock: availableStock,
         quantity: 1,
         priceType: 'original',
         originalPrice: product.price || 0,
@@ -324,13 +471,16 @@ function renderSaleCart() {
     document.getElementById('sale-total-amount').textContent = formatCurrency(total);
 }
 
-window.saveSale = async function() {
+window.saveSale = async function(btn) {
     if (currentSaleItems.length === 0) {
         showError('Добавьте хотя бы один товар в корзину');
         return;
     }
 
     const totalAmount = currentSaleItems.reduce((sum, item) => sum + item.finalPrice * item.quantity, 0);
+
+    btn.disabled = true;
+    btn.textContent = 'Сохранение...';
 
     try {
         await window.firebaseFunctions.addDoc(
@@ -363,16 +513,88 @@ window.saveSale = async function() {
 
         closeModal();
         currentSaleItems = [];
+        editingSaleId = null;
         await loadSales();
         await loadProducts();
         updateDashboard();
     } catch (error) {
         showError('Ошибка при сохранении продажи');
         console.error(error);
+        btn.disabled = false;
+        btn.textContent = 'Оформить продажу';
     }
 };
 
-window.deleteSale = async function(saleId) {
+window.updateSale = async function(saleId, btn) {
+    if (currentSaleItems.length === 0) {
+        showError('Добавьте хотя бы один товар в корзину');
+        return;
+    }
+
+    const oldSale = sales.find(s => s.id === saleId);
+    if (!oldSale) return;
+
+    const totalAmount = currentSaleItems.reduce((sum, item) => sum + item.finalPrice * item.quantity, 0);
+
+    btn.disabled = true;
+    btn.textContent = 'Сохранение...';
+
+    try {
+        // Откатываем старые остатки
+        for (const oldItem of oldSale.items) {
+            const product = products.find(p => p.id === oldItem.productId);
+            if (product) {
+                const newStock = product.stock + oldItem.quantity;
+                await window.firebaseFunctions.updateDoc(
+                    window.firebaseFunctions.doc(window.firebaseDb, 'products', oldItem.productId),
+                    { stock: newStock }
+                );
+            }
+        }
+
+        // Обновляем продажу
+        await window.firebaseFunctions.updateDoc(
+            window.firebaseFunctions.doc(window.firebaseDb, 'sales', saleId),
+            {
+                items: currentSaleItems.map(item => ({
+                    productId: item.productId,
+                    productName: item.name,
+                    quantity: item.quantity,
+                    price: item.finalPrice,
+                    priceType: item.priceType,
+                    total: item.finalPrice * item.quantity
+                })),
+                totalAmount: totalAmount
+            }
+        );
+
+        // Применяем новые остатки
+        for (const item of currentSaleItems) {
+            const product = products.find(p => p.id === item.productId);
+            if (product) {
+                const newStock = product.stock - item.quantity;
+                await window.firebaseFunctions.updateDoc(
+                    window.firebaseFunctions.doc(window.firebaseDb, 'products', item.productId),
+                    { stock: newStock }
+                );
+            }
+        }
+
+        closeModal();
+        currentSaleItems = [];
+        editingSaleId = null;
+        await loadSales();
+        await loadProducts();
+        updateDashboard();
+    } catch (error) {
+        showError('Ошибка при обновлении продажи');
+        console.error(error);
+        btn.disabled = false;
+        btn.textContent = 'Сохранить изменения';
+    }
+};
+
+window.deleteSale = async function(saleId, btn) {
     if (!confirm('Удалить эту продажу? Остатки товаров будут восстановлены.')) return;
     
     if (window.currentUser.role !== 'owner') {
@@ -382,6 +604,9 @@ window.deleteSale = async function(saleId) {
 
     const sale = sales.find(s => s.id === saleId);
     if (!sale || !sale.items) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Удаление...';
 
     try {
         for (const item of sale.items) {
@@ -405,6 +630,8 @@ window.deleteSale = async function(saleId) {
     } catch (error) {
         showError('Ошибка при удалении продажи');
         console.error(error);
+        btn.disabled = false;
+        btn.textContent = 'Удалить';
     }
 };
 
@@ -424,6 +651,8 @@ async function loadIncome() {
 }
 
 document.getElementById('add-income-btn').addEventListener('click', () => {
+    editingIncomeId = null;
+    
     let options = '';
     if (products.length > 0) {
         options = products.map(p => `<option value="${p.id}">${p.name} (${p.size || '—'})</option>`).join('');
@@ -467,7 +696,7 @@ document.getElementById('add-income-btn').addEventListener('click', () => {
             <input type="number" id="new-product-discount" value="0">
         </div>
         
-        <button class="btn-primary" onclick="saveIncome()">Сохранить поступление</button>
+        <button class="btn-primary" onclick="saveIncome(this)">Сохранить поступление</button>
     `;
     openModal('Добавить поступление', content);
     
@@ -491,7 +720,38 @@ document.getElementById('add-income-btn').addEventListener('click', () => {
     }, 100);
 });
 
-window.saveIncome = async function() {
+window.editIncome = async function(incomeId) {
+    const incomeRecord = income.find(i => i.id === incomeId);
+    if (!incomeRecord) return;
+
+    if (window.currentUser.role !== 'owner') {
+        showError('Только владелец может редактировать поступления');
+        return;
+    }
+
+    editingIncomeId = incomeId;
+
+    const options = products.map(p => 
+        `<option value="${p.id}" ${p.id === incomeRecord.productId ? 'selected' : ''}>${p.name} (${p.size || '—'})</option>`
+    ).join('');
+
+    const content = `
+        <label>Товар</label>
+        <select id="income-product" required>
+            ${options}
+        </select>
+        
+        <div id="income-quantity-wrapper">
+            <label>Количество</label>
+            <input type="number" id="income-quantity" min="1" value="${incomeRecord.quantity}" required>
+        </div>
+        
+        <button class="btn-primary" onclick="updateIncome('${incomeId}', this)">Сохранить изменения</button>
+    `;
+    openModal('Редактировать поступление', content);
+};
+
+window.saveIncome = async function(btn) {
     const productSelect = document.getElementById('income-product');
     let productId = productSelect.value;
     const quantity = parseInt(document.getElementById('income-quantity').value);
@@ -511,6 +771,9 @@ window.saveIncome = async function() {
         const newCost = parseFloat(document.getElementById('new-product-cost').value) || 0;
         const newPrice = parseFloat(document.getElementById('new-product-price').value) || 0;
         const newDiscount = parseFloat(document.getElementById('new-product-discount').value) || 0;
+
+        btn.disabled = true;
+        btn.textContent = 'Сохранение...';
 
         try {
             const newArticle = generateArticle();
@@ -536,6 +799,8 @@ window.saveIncome = async function() {
         } catch (error) {
             showError('Ошибка при создании нового товара');
             console.error(error);
+            btn.disabled = false;
+            btn.textContent = 'Сохранить поступление';
             return;
         }
     }
@@ -556,6 +821,9 @@ window.saveIncome = async function() {
     }
 
     const totalAmount = (product ? product.cost : 0) * quantity;
+
+    btn.disabled = true;
+    btn.textContent = 'Сохранение...';
 
     try {
         await window.firebaseFunctions.addDoc(
@@ -580,20 +848,90 @@ window.saveIncome = async function() {
         }
 
         closeModal();
+        editingIncomeId = null;
         await loadIncome();
         await loadProducts();
         updateDashboard();
     } catch (error) {
         showError('Ошибка при сохранении поступления');
         console.error(error);
+        btn.disabled = false;
+        btn.textContent = 'Сохранить поступление';
     }
 };
 
-window.deleteIncome = async function(incomeId) {
+window.updateIncome = async function(incomeId, btn) {
+    const productId = document.getElementById('income-product').value;
+    const quantity = parseInt(document.getElementById('income-quantity').value);
+    
+    const oldIncome = income.find(i => i.id === incomeId);
+    if (!oldIncome) return;
+
+    const product = products.find(p => p.id === productId);
+    if (!product) {
+        showError('Товар не найден');
+        return;
+    }
+
+    const totalAmount = product.cost * quantity;
+
+    btn.disabled = true;
+    btn.textContent = 'Сохранение...';
+
+    try {
+        // Откатываем старое поступление
+        const oldProduct = products.find(p => p.id === oldIncome.productId);
+        if (oldProduct) {
+            const newStock = Math.max(0, oldProduct.stock - oldIncome.quantity);
+            await window.firebaseFunctions.updateDoc(
+                window.firebaseFunctions.doc(window.firebaseDb, 'products', oldIncome.productId),
+                { stock: newStock }
+            );
+        }
+
+        // Обновляем запись
+        await window.firebaseFunctions.updateDoc(
+            window.firebaseFunctions.doc(window.firebaseDb, 'income', incomeId),
+            {
+                productId: productId,
+                productName: `${product.name} (${product.size || '—'})`,
+                quantity: quantity,
+                cost: product.cost,
+                totalAmount: totalAmount
+            }
+        );
+
+        // Применяем новое поступление
+        const updatedProduct = products.find(p => p.id === productId);
+        if (updatedProduct) {
+            const newStock = updatedProduct.stock + quantity;
+            await window.firebaseFunctions.updateDoc(
+                window.firebaseFunctions.doc(window.firebaseDb, 'products', productId),
+                { stock: newStock }
+            );
+        }
+
+        closeModal();
+        editingIncomeId = null;
+        await loadIncome();
+        await loadProducts();
+        updateDashboard();
+    } catch (error) {
+        showError('Ошибка при обновлении поступления');
+        console.error(error);
+        btn.disabled = false;
+        btn.textContent = 'Сохранить изменения';
+    }
+};
+
+window.deleteIncome = async function(incomeId, btn) {
     if (!confirm('Удалить это поступление? Остаток товара будет уменьшен.')) return;
     
     const incomeRecord = income.find(i => i.id === incomeId);
     if (!incomeRecord) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Удаление...';
 
     try {
         await window.firebaseFunctions.deleteDoc(
@@ -615,6 +953,8 @@ window.deleteIncome = async function(incomeId) {
     } catch (error) {
         showError('Ошибка при удалении поступления');
         console.error(error);
+        btn.disabled = false;
+        btn.textContent = 'Удалить';
     }
 };
 
@@ -647,12 +987,34 @@ document.getElementById('add-plan-btn').addEventListener('click', () => {
         <label>План продаж (₽)</label>
         <input type="number" id="plan-target" min="1" required>
         
-        <button class="btn-primary" onclick="savePlan()">Сохранить план</button>
+        <button class="btn-primary" onclick="savePlan(this)">Сохранить план</button>
     `;
     openModal('Установить план продаж', content);
 });
 
-window.savePlan = async function() {
+window.editPlan = function(planId) {
+    const plan = plans.find(p => p.id === planId);
+    if (!plan) return;
+
+    const content = `
+        <label>Название периода</label>
+        <input type="text" id="plan-name" value="${plan.name}" required>
+        
+        <label>Дата начала</label>
+        <input type="date" id="plan-start" value="${plan.startDate}" required>
+        
+        <label>Дата окончания</label>
+        <input type="date" id="plan-end" value="${plan.endDate}" required>
+        
+        <label>План продаж (₽)</label>
+        <input type="number" id="plan-target" min="1" value="${plan.targetAmount}" required>
+        
+        <button class="btn-primary" onclick="updatePlan('${planId}', this)">Сохранить изменения</button>
+    `;
+    openModal('Редактировать план', content);
+};
+
+window.savePlan = async function(btn) {
     const name = document.getElementById('plan-name').value;
     const startDate = document.getElementById('plan-start').value;
     const endDate = document.getElementById('plan-end').value;
@@ -662,6 +1024,9 @@ window.savePlan = async function() {
         showError('Заполните все поля корректно');
         return;
     }
+
+    btn.disabled = true;
+    btn.textContent = 'Сохранение...';
 
     try {
         await window.firebaseFunctions.addDoc(
@@ -679,11 +1044,47 @@ window.savePlan = async function() {
     } catch (error) {
         showError('Ошибка при сохранении плана');
         console.error(error);
+        btn.disabled = false;
+        btn.textContent = 'Сохранить план';
     }
 };
 
-window.deletePlan = async function(planId) {
+window.updatePlan = async function(planId, btn) {
+    const name = document.getElementById('plan-name').value;
+    const startDate = document.getElementById('plan-start').value;
+    const endDate = document.getElementById('plan-end').value;
+    const target = parseFloat(document.getElementById('plan-target').value);
+
+    if (!name || !startDate || !endDate || isNaN(target)) {
+        showError('Заполните все поля корректно');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Сохранение...';
+
+    try {
+        await window.firebaseFunctions.updateDoc(
+            window.firebaseFunctions.doc(window.firebaseDb, 'plans', planId),
+            { name, startDate, endDate, targetAmount: target }
+        );
+        
+        closeModal();
+        await loadPlans();
+        updateDashboard();
+    } catch (error) {
+        showError('Ошибка при обновлении плана');
+        console.error(error);
+        btn.disabled = false;
+        btn.textContent = 'Сохранить изменения';
+    }
+};
+
+window.deletePlan = async function(planId, btn) {
     if (!confirm('Удалить этот план?')) return;
+    
+    btn.disabled = true;
+    btn.textContent = 'Удаление...';
     
     try {
         await window.firebaseFunctions.deleteDoc(
@@ -694,6 +1095,8 @@ window.deletePlan = async function(planId) {
     } catch (error) {
         showError('Ошибка при удалении плана');
         console.error(error);
+        btn.disabled = false;
+        btn.textContent = 'Удалить';
     }
 };
 
@@ -728,7 +1131,6 @@ function updateProductFilters() {
         sizeSelect.value = currentVal;
     }
 
-    // Обновляем max цену
     const maxPrice = Math.max(...products.map(p => p.price || 0), 100000);
     const priceMaxInput = document.getElementById('product-price-max');
     if (priceMaxInput) {
@@ -738,7 +1140,7 @@ function updateProductFilters() {
 }
 
 function updateIncomeFilters() {
-    const maxAmount = Math.max(...income.map(i => i.totalAmount || 0), 100000);
+    const maxAmount = Math.max(...income.map(i => i.totalAmount || 0), 1000000);
     const amountMaxInput = document.getElementById('income-amount-max');
     if (amountMaxInput) {
         amountMaxInput.max = maxAmount;
@@ -757,7 +1159,7 @@ function updateSalesFilters() {
         sellerSelect.value = currentVal;
     }
 
-    const maxAmount = Math.max(...sales.map(s => s.totalAmount || 0), 100000);
+    const maxAmount = Math.max(...sales.map(s => s.totalAmount || 0), 1000000);
     const amountMaxInput = document.getElementById('sales-amount-max');
     if (amountMaxInput) {
         amountMaxInput.max = maxAmount;
@@ -944,13 +1346,13 @@ document.getElementById('income-amount-max')?.addEventListener('input', (e) => {
 });
 
 window.resetIncomeFilters = function() {
-    incomeFilters = { search: '', dateFrom: '', dateTo: '', amountMin: 0, amountMax: 100000 };
+    incomeFilters = { search: '', dateFrom: '', dateTo: '', amountMin: 0, amountMax: 1000000 };
     document.getElementById('income-search').value = '';
     document.getElementById('income-date-from').value = '';
     document.getElementById('income-date-to').value = '';
     document.getElementById('income-amount-min').value = 0;
-    document.getElementById('income-amount-max').value = 100000;
-    document.getElementById('income-amount-range-label').textContent = '0 - 100000 ₽';
+    document.getElementById('income-amount-max').value = 1000000;
+    document.getElementById('income-amount-range-label').textContent = '0 - 1000000 ₽';
     renderIncome();
 };
 
@@ -1000,14 +1402,14 @@ document.getElementById('sales-amount-max')?.addEventListener('input', (e) => {
 });
 
 window.resetSalesFilters = function() {
-    salesFilters = { search: '', dateFrom: '', dateTo: '', seller: '', amountMin: 0, amountMax: 100000 };
+    salesFilters = { search: '', dateFrom: '', dateTo: '', seller: '', amountMin: 0, amountMax: 1000000 };
     document.getElementById('sales-search').value = '';
     document.getElementById('sales-date-from').value = '';
     document.getElementById('sales-date-to').value = '';
     document.getElementById('sales-seller-filter').value = '';
     document.getElementById('sales-amount-min').value = 0;
-    document.getElementById('sales-amount-max').value = 100000;
-    document.getElementById('sales-amount-range-label').textContent = '0 - 100000 ₽';
+    document.getElementById('sales-amount-max').value = 1000000;
+    document.getElementById('sales-amount-range-label').textContent = '0 - 1000000 ₽';
     renderSales();
 };
 

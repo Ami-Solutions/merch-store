@@ -3,13 +3,24 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     
     const email = document.getElementById('login-email').value;
     const password = document.getElementById('login-password').value;
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Вход...';
 
     try {
-        await window.firebaseFunctions.signInWithEmailAndPassword(
+        console.log('Попытка входа для:', email);
+        const userCredential = await window.firebaseFunctions.signInWithEmailAndPassword(
             window.firebaseAuth, email, password
         );
+        console.log('Вход успешен, UID:', userCredential.user.uid);
     } catch (error) {
-        showError(getErrorMessage(error.code));
+        console.error('Firebase Auth Error:', error);
+        console.error('Error code:', error.code);
+        console.error('Error message:', error.message);
+        showError(getErrorMessage(error.code) + ' (код: ' + error.code + ')');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Войти';
     }
 });
 
@@ -31,6 +42,9 @@ async function loadUserData(user) {
         if (userData.role !== 'owner') {
             document.getElementById('plans-link').parentElement.style.display = 'none';
             document.getElementById('users-link').parentElement.style.display = 'none';
+            // Скрываем и в мобильном меню
+            document.getElementById('mobile-plans-link').style.display = 'none';
+            document.getElementById('mobile-users-link').style.display = 'none';
         }
         
         if (userData.role === 'owner') {
@@ -73,12 +87,12 @@ document.getElementById('add-user-btn').addEventListener('click', () => {
             <option value="owner">Владелец</option>
         </select>
         
-        <button class="btn-primary" onclick="saveUser()">Создать сотрудника</button>
+        <button class="btn-primary" onclick="saveUser(this)">Создать сотрудника</button>
     `;
     openModal('Добавить сотрудника', content);
 });
 
-window.saveUser = async function() {
+window.saveUser = async function(btn) {
     const name = document.getElementById('user-name').value;
     const email = document.getElementById('user-email').value;
     const password = document.getElementById('user-password').value;
@@ -88,6 +102,9 @@ window.saveUser = async function() {
         showError('Пароль должен быть минимум 6 символов');
         return;
     }
+
+    btn.disabled = true;
+    btn.textContent = 'Создание...';
 
     try {
         const secondaryApp = window.firebaseFunctions.initializeApp(
@@ -120,11 +137,16 @@ window.saveUser = async function() {
     } catch (error) {
         showError(getErrorMessage(error.code));
         console.error(error);
+        btn.disabled = false;
+        btn.textContent = 'Создать сотрудника';
     }
 };
 
-window.deleteUser = async function(userId) {
+window.deleteUser = async function(userId, btn) {
     if (!confirm('Удалить этого сотрудника? Он больше не сможет войти в систему.')) return;
+    
+    btn.disabled = true;
+    btn.textContent = 'Удаление...';
     
     try {
         await window.firebaseFunctions.deleteDoc(
@@ -134,6 +156,8 @@ window.deleteUser = async function(userId) {
     } catch (error) {
         showError('Ошибка при удалении пользователя');
         console.error(error);
+        btn.disabled = false;
+        btn.textContent = 'Удалить';
     }
 };
 
@@ -147,7 +171,7 @@ function renderUsers(users) {
             <td>${formatDate(user.createdAt)}</td>
             <td>
                 ${user.uid !== window.currentUser.uid ? 
-                    `<button class="action-btn delete" onclick="deleteUser('${user.id}')">Удалить</button>` : 
+                    `<button class="action-btn delete" onclick="deleteUser('${user.id}', this)">Удалить</button>` : 
                     '<span style="color: var(--text-secondary)">Это вы</span>'}
             </td>
         </tr>

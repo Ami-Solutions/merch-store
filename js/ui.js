@@ -40,8 +40,9 @@ function renderProducts() {
             <td>${product.discount > 0 ? formatCurrency(product.discount) : '—'}</td>
             <td>${product.stock}</td>
             <td>
+                <button class="action-btn edit" onclick="editProduct('${product.id}')">Изменить</button>
                 ${window.currentUser && window.currentUser.role === 'owner' ? 
-                    `<button class="action-btn delete" onclick="deleteProduct('${product.id}')">Удалить</button>` : ''}
+                    `<button class="action-btn delete" onclick="deleteProduct('${product.id}', this)">Удалить</button>` : ''}
             </td>
         </tr>
     `).join('');
@@ -65,8 +66,9 @@ function renderSales() {
                 <td><strong>${formatCurrency(sale.totalAmount)}</strong></td>
                 <td>${sale.seller}</td>
                 <td>
+                    <button class="action-btn edit" onclick="editSale('${sale.id}')">Изменить</button>
                     ${window.currentUser && window.currentUser.role === 'owner' ? 
-                        `<button class="action-btn delete" onclick="deleteSale('${sale.id}')">Удалить</button>` : ''}
+                        `<button class="action-btn delete" onclick="deleteSale('${sale.id}', this)">Удалить</button>` : ''}
                 </td>
             </tr>
         `;
@@ -84,8 +86,9 @@ function renderIncome() {
             <td>${item.quantity}</td>
             <td>${formatCurrency(item.totalAmount)}</td>
             <td>
+                <button class="action-btn edit" onclick="editIncome('${item.id}')">Изменить</button>
                 ${window.currentUser && window.currentUser.role === 'owner' ? 
-                    `<button class="action-btn delete" onclick="deleteIncome('${item.id}')">Удалить</button>` : ''}
+                    `<button class="action-btn delete" onclick="deleteIncome('${item.id}', this)">Удалить</button>` : ''}
             </td>
         </tr>
     `).join('');
@@ -126,8 +129,9 @@ function renderPlans() {
                     </div>
                 </td>
                 <td>
+                    <button class="action-btn edit" onclick="editPlan('${plan.id}')">Изменить</button>
                     ${window.currentUser.role === 'owner' ? 
-                        `<button class="action-btn delete" onclick="deletePlan('${plan.id}')">Удалить</button>` : ''}
+                        `<button class="action-btn delete" onclick="deletePlan('${plan.id}', this)">Удалить</button>` : ''}
                 </td>
             </tr>
         `;
@@ -293,9 +297,13 @@ function updateDashboard() {
     }
 
     renderPlansOverview();
-    renderSalesChart();
-    renderTopProductsChart();
-    renderDistributionChart();
+    
+    // Используем setTimeout, чтобы Chart.js успел увидеть видимые canvas
+    setTimeout(() => {
+        renderSalesChart();
+        renderTopProductsChart();
+        renderDistributionChart();
+    }, 100);
 }
 
 function renderSalesChart() {
@@ -331,7 +339,7 @@ function renderSalesChart() {
         }
 
         const diffDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
-        const maxPoints = 60; // Ограничение для читаемости
+        const maxPoints = 60;
         const step = diffDays > maxPoints ? Math.ceil(diffDays / maxPoints) : 1;
 
         for (let i = 0; i < diffDays; i += step) {
@@ -364,6 +372,7 @@ function renderSalesChart() {
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
                 y: {
@@ -416,6 +425,7 @@ function renderTopProductsChart() {
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             indexAxis: 'y',
             plugins: { legend: { display: false } },
             scales: {
@@ -439,11 +449,9 @@ function renderDistributionChart() {
     
     if (distributionChart) distributionChart.destroy();
 
-    // Фильтруем только товары с остатком > 0
     const inStockProducts = products.filter(p => p.stock > 0);
     
     if (inStockProducts.length === 0) {
-        // Пустой график
         distributionChart = new Chart(ctx, {
             type: 'doughnut',
             data: {
@@ -452,6 +460,7 @@ function renderDistributionChart() {
             },
             options: {
                 responsive: true,
+                maintainAspectRatio: false,
                 plugins: { legend: { display: false } }
             }
         });
@@ -460,7 +469,6 @@ function renderDistributionChart() {
 
     let labels = [];
     let data = [];
-    let backgroundColors = [];
     const palette = ['#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#ec4899', '#6366f1', '#14b8a6'];
 
     if (currentDistributionType === 'category') {
@@ -479,7 +487,6 @@ function renderDistributionChart() {
                         p.gender === 'unisex' ? 'Унисекс' : 'Не указан';
             groups[key] += p.stock;
         });
-        // Удаляем пустые
         Object.keys(groups).forEach(k => {
             if (groups[k] > 0) {
                 labels.push(k);
@@ -503,7 +510,7 @@ function renderDistributionChart() {
         });
     }
 
-    backgroundColors = labels.map((_, i) => palette[i % palette.length]);
+    const backgroundColors = labels.map((_, i) => palette[i % palette.length]);
 
     distributionChart = new Chart(ctx, {
         type: 'doughnut',
@@ -517,6 +524,7 @@ function renderDistributionChart() {
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             plugins: {
                 legend: {
                     position: 'bottom',
@@ -558,7 +566,6 @@ document.getElementById('distribution-type-selector')?.addEventListener('change'
     renderDistributionChart();
 });
 
-// Периоды для статистики Продаж
 document.getElementById('sales-period-selector')?.addEventListener('change', (e) => {
     const value = e.target.value;
     const customDiv = document.getElementById('sales-custom-period');
@@ -578,7 +585,6 @@ window.applySalesCustomPeriod = function() {
     updateDashboard();
 };
 
-// Периоды для статистики Среднего чека
 document.getElementById('avg-period-selector')?.addEventListener('change', (e) => {
     const value = e.target.value;
     const customDiv = document.getElementById('avg-custom-period');

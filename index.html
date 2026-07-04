@@ -15,7 +15,7 @@
             <form id="login-form" class="auth-form active">
                 <input type="email" id="login-email" placeholder="Email" required>
                 <input type="password" id="login-password" placeholder="Пароль" required>
-                <button type="submit" class="btn-primary">Войти</button>
+                <button type="submit" class="btn-primary btn-center">Войти</button>
             </form>
 
             <div id="auth-error" class="error-message"></div>
@@ -24,6 +24,12 @@
 
     <div id="app-screen" class="screen">
         <nav class="topbar">
+            <button class="burger-btn" id="burger-btn" aria-label="Меню">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+            
             <div class="topbar-left">
                 <h2 class="logo">Мерч!</h2>
                 <span id="user-role" class="role-badge"></span>
@@ -39,9 +45,35 @@
                 </ul>
             </div>
             <div class="topbar-right">
+                <button class="theme-toggle" id="theme-toggle" aria-label="Сменить тему">
+                    <span class="theme-icon">🌙</span>
+                </button>
                 <button id="logout-btn" class="btn-secondary">Выйти</button>
             </div>
         </nav>
+
+        <!-- Мобильное меню -->
+        <div class="mobile-menu-overlay" id="mobile-menu-overlay"></div>
+        <aside class="mobile-menu" id="mobile-menu">
+            <div class="mobile-menu-header">
+                <h3>Меню</h3>
+                <button class="mobile-menu-close" id="mobile-menu-close">&times;</button>
+            </div>
+            <ul class="mobile-nav-menu">
+                <li><a href="#" data-section="dashboard" class="mobile-nav-link active">📊 Дашборд</a></li>
+                <li><a href="#" data-section="products" class="mobile-nav-link">👕 Товары</a></li>
+                <li><a href="#" data-section="income" class="mobile-nav-link">📦 Поступления</a></li>
+                <li><a href="#" data-section="sales" class="mobile-nav-link">💰 Продажи</a></li>
+                <li id="mobile-plans-link"><a href="#" data-section="plans" class="mobile-nav-link">🎯 Планы</a></li>
+                <li id="mobile-users-link"><a href="#" data-section="users" class="mobile-nav-link">👥 Пользователи</a></li>
+            </ul>
+            <div class="mobile-menu-footer">
+                <button class="theme-toggle-mobile" id="theme-toggle-mobile">
+                    <span class="theme-icon">🌙</span> Сменить тему
+                </button>
+                <button id="logout-btn-mobile" class="btn-secondary">Выйти</button>
+            </div>
+        </aside>
 
         <main class="main-content">
             <!-- Дашборд -->
@@ -128,7 +160,7 @@
                 </div>
 
                 <h3 class="dashboard-subtitle">Аналитика</h3>
-                <div class="charts-grid">
+                <div class="charts-grid charts-grid-2col">
                     <div class="chart-card">
                         <div class="chart-header">
                             <h3>Топ товаров</h3>
@@ -137,7 +169,9 @@
                                 <option value="10">Топ-10</option>
                             </select>
                         </div>
-                        <canvas id="top-products-chart"></canvas>
+                        <div class="chart-wrapper">
+                            <canvas id="top-products-chart"></canvas>
+                        </div>
                     </div>
                     <div class="chart-card">
                         <div class="chart-header">
@@ -156,8 +190,12 @@
                             <input type="date" id="sales-chart-period-end">
                             <button class="btn-small" onclick="applySalesChartCustomPeriod()">Применить</button>
                         </div>
-                        <canvas id="sales-chart"></canvas>
+                        <div class="chart-wrapper">
+                            <canvas id="sales-chart"></canvas>
+                        </div>
                     </div>
+                </div>
+                <div class="charts-grid charts-grid-1col">
                     <div class="chart-card">
                         <div class="chart-header">
                             <h3>Распределение товаров</h3>
@@ -167,7 +205,9 @@
                                 <option value="gender">По полу</option>
                             </select>
                         </div>
-                        <canvas id="distribution-chart"></canvas>
+                        <div class="chart-wrapper">
+                            <canvas id="distribution-chart"></canvas>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -212,10 +252,10 @@
                         </select>
                     </div>
                     <div class="filter-group filter-group-wide">
-                        <label>Цена продажи: <span id="product-price-range-label">0 - 10000 ₽</span></label>
+                        <label>Цена продажи: <span id="product-price-range-label">0 - 100000 ₽</span></label>
                         <div class="range-slider">
-                            <input type="range" id="product-price-min" min="0" max="10000" value="0" step="100">
-                            <input type="range" id="product-price-max" min="0" max="10000" value="10000" step="100">
+                            <input type="range" id="product-price-min" min="0" max="100000" value="0" step="100">
+                            <input type="range" id="product-price-max" min="0" max="100000" value="100000" step="100">
                         </div>
                     </div>
                     <button class="btn-secondary btn-reset-filters" onclick="resetProductFilters()">Сбросить</button>
@@ -264,10 +304,10 @@
                         <input type="date" id="income-date-to" class="filter-input">
                     </div>
                     <div class="filter-group filter-group-wide">
-                        <label>Сумма: <span id="income-amount-range-label">0 - 100000 ₽</span></label>
+                        <label>Сумма: <span id="income-amount-range-label">0 - 1000000 ₽</span></label>
                         <div class="range-slider">
-                            <input type="range" id="income-amount-min" min="0" max="100000" value="0" step="100">
-                            <input type="range" id="income-amount-max" min="0" max="100000" value="100000" step="100">
+                            <input type="range" id="income-amount-min" min="0" max="1000000" value="0" step="100">
+                            <input type="range" id="income-amount-max" min="0" max="1000000" value="1000000" step="100">
                         </div>
                     </div>
                     <button class="btn-secondary btn-reset-filters" onclick="resetIncomeFilters()">Сбросить</button>
@@ -316,10 +356,10 @@
                         </select>
                     </div>
                     <div class="filter-group filter-group-wide">
-                        <label>Сумма: <span id="sales-amount-range-label">0 - 100000 ₽</span></label>
+                        <label>Сумма: <span id="sales-amount-range-label">0 - 1000000 ₽</span></label>
                         <div class="range-slider">
-                            <input type="range" id="sales-amount-min" min="0" max="100000" value="0" step="100">
-                            <input type="range" id="sales-amount-max" min="0" max="100000" value="100000" step="100">
+                            <input type="range" id="sales-amount-min" min="0" max="1000000" value="0" step="100">
+                            <input type="range" id="sales-amount-max" min="0" max="1000000" value="1000000" step="100">
                         </div>
                     </div>
                     <button class="btn-secondary btn-reset-filters" onclick="resetSalesFilters()">Сбросить</button>
