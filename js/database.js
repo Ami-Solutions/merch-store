@@ -14,7 +14,7 @@ let productFilters = {
     brand: '',
     size: '',
     priceMin: 0,
-    priceMax: 100000
+    priceMax: 250000
 };
 
 let incomeFilters = {
@@ -22,7 +22,7 @@ let incomeFilters = {
     dateFrom: '',
     dateTo: '',
     amountMin: 0,
-    amountMax: 1000000
+    amountMax: 250000
 };
 
 let salesFilters = {
@@ -31,7 +31,7 @@ let salesFilters = {
     dateTo: '',
     seller: '',
     amountMin: 0,
-    amountMax: 1000000
+    amountMax: 250000
 };
 
 let planFilters = {
@@ -39,6 +39,14 @@ let planFilters = {
     dateFrom: '',
     dateTo: ''
 };
+
+// === УТИЛИТЫ ДЛЯ ДАТ ===
+function getCurrentDateTimeLocal() {
+    const now = new Date();
+    const offset = now.getTimezoneOffset();
+    const local = new Date(now.getTime() - offset * 60000);
+    return local.toISOString().slice(0, 16);
+}
 
 // === ТОВАРЫ ===
 async function loadProducts() {
@@ -85,6 +93,9 @@ document.getElementById('add-product-btn').addEventListener('click', () => {
         <label>Цена по скидке</label>
         <input type="number" id="product-discount" value="0">
         
+        <label>Остаток</label>
+        <input type="number" id="product-stock" value="0">
+        
         <button class="btn-primary" onclick="saveProduct(this)">Сохранить</button>
     `;
     openModal('Добавить товар', content);
@@ -124,6 +135,9 @@ window.editProduct = function(productId) {
         <label>Цена по скидке</label>
         <input type="number" id="product-discount" value="${product.discount || 0}">
         
+        <label>Остаток</label>
+        <input type="number" id="product-stock" value="${product.stock || 0}">
+        
         <button class="btn-primary" onclick="updateProduct('${productId}', this)">Сохранить изменения</button>
     `;
     openModal('Редактировать товар', content);
@@ -144,6 +158,7 @@ window.saveProduct = async function(btn) {
     const cost = parseFloat(document.getElementById('product-cost').value) || 0;
     const price = parseFloat(document.getElementById('product-price').value) || 0;
     const discount = parseFloat(document.getElementById('product-discount').value) || 0;
+    const stock = parseInt(document.getElementById('product-stock').value) || 0;
 
     const article = generateArticle();
 
@@ -154,8 +169,7 @@ window.saveProduct = async function(btn) {
         await window.firebaseFunctions.addDoc(
             window.firebaseFunctions.collection(window.firebaseDb, 'products'),
             {
-                article, name, category, brand, gender, size, cost, price, discount,
-                stock: 0,
+                article, name, category, brand, gender, size, cost, price, discount, stock,
                 createdAt: new Date().toISOString()
             }
         );
@@ -185,6 +199,7 @@ window.updateProduct = async function(productId, btn) {
     const cost = parseFloat(document.getElementById('product-cost').value) || 0;
     const price = parseFloat(document.getElementById('product-price').value) || 0;
     const discount = parseFloat(document.getElementById('product-discount').value) || 0;
+    const stock = parseInt(document.getElementById('product-stock').value) || 0;
 
     btn.disabled = true;
     btn.textContent = 'Сохранение...';
@@ -192,7 +207,7 @@ window.updateProduct = async function(productId, btn) {
     try {
         await window.firebaseFunctions.updateDoc(
             window.firebaseFunctions.doc(window.firebaseDb, 'products', productId),
-            { name, category, brand, gender, size, cost, price, discount }
+            { name, category, brand, gender, size, cost, price, discount, stock }
         );
         
         closeModal();
@@ -255,10 +270,18 @@ document.getElementById('add-sale-btn').addEventListener('click', () => {
 
     const options = products
         .filter(p => p.stock > 0)
-        .map(p => `<option value="${p.id}">${p.name} (${p.size || '–'}) – Остаток: ${p.stock}</option>`)
+        .map(p => `<option value="${p.id}">${p.name} (${p.size || '—'}) — Остаток: ${p.stock}</option>`)
         .join('');
 
     const content = `
+        <label>Дата и время продажи</label>
+        <input type="datetime-local" id="sale-date" value="${getCurrentDateTimeLocal()}">
+        
+        <label>Продавец</label>
+        <input type="text" id="sale-seller" value="${window.currentUser.name || ''}">
+        
+        <div class="divider">Товары</div>
+        
         <label>Добавить товар в продажу</label>
         <select id="sale-product-select">
             <option value="">-- Выберите товар --</option>
@@ -285,23 +308,48 @@ window.editSale = function(saleId) {
     if (!sale || !sale.items) return;
 
     editingSaleId = saleId;
-    currentSaleItems = sale.items.map(item => ({
-        productId: item.productId,
-        name: item.productName,
-        maxStock: 999999,
-        quantity: item.quantity,
-        priceType: item.priceType || 'original',
-        originalPrice: products.find(p => p.id === item.productId)?.price || item.price,
-        discountPrice: products.find(p => p.id === item.productId)?.discount || 0,
-        customPrice: item.price,
-        finalPrice: item.price
-    }));
+    currentSaleItems = sale.items.map(item => {
+        const product = products.find(p => p.id === item.productId);
+        const currentStock = product ? product.stock : 0;
+        // К текущему остатку на складе добавляем количество из этой продажи
+        // (как будто мы "возвращаем" товар на склад для возможности редактирования)
+        const maxStock = currentStock + item.quantity;
+        
+        return {
+            productId: item.productId,
+            name: item.productName,
+            maxStock: maxStock,
+            quantity: item.quantity,
+            priceType: item.priceType || 'original',
+            originalPrice: product?.price || item.price,
+            discountPrice: product?.discount || 0,
+            customPrice: item.price,
+            finalPrice: item.price
+        };
+    });
 
-    const allProducts = products.map(p => 
-        `<option value="${p.id}">${p.name} (${p.size || '–'}) – Остаток: ${p.stock + (sale.items.find(i => i.productId === p.id)?.quantity || 0)}</option>`
-    ).join('');
+    const allProducts = products.map(p => {
+        // Для товаров, которые уже в корзине этой продажи, увеличиваем доступный остаток
+        const itemInSale = sale.items.find(i => i.productId === p.id);
+        const availableStock = p.stock + (itemInSale ? itemInSale.quantity : 0);
+        return `<option value="${p.id}">${p.name} (${p.size || '—'}) — Остаток: ${availableStock}</option>`;
+    }).join('');
+
+    // Конвертируем ISO дату в datetime-local формат
+    const saleDate = new Date(sale.date);
+    const offset = saleDate.getTimezoneOffset();
+    const localDate = new Date(saleDate.getTime() - offset * 60000);
+    const dateValue = localDate.toISOString().slice(0, 16);
 
     const content = `
+        <label>Дата и время продажи</label>
+        <input type="datetime-local" id="sale-date" value="${dateValue}">
+        
+        <label>Продавец</label>
+        <input type="text" id="sale-seller" value="${sale.seller || ''}">
+        
+        <div class="divider">Товары</div>
+        
         <label>Добавить товар в продажу</label>
         <select id="sale-product-select">
             <option value="">-- Выберите товар --</option>
@@ -352,7 +400,7 @@ window.addSaleItem = function() {
 
     currentSaleItems.push({
         productId: productId,
-        name: `${product.name} (${product.size || '–'})`,
+        name: `${product.name} (${product.size || '—'})`,
         maxStock: availableStock,
         quantity: 1,
         priceType: 'original',
@@ -467,6 +515,18 @@ window.saveSale = async function(btn) {
         return;
     }
 
+    const dateInput = document.getElementById('sale-date').value;
+    const sellerInput = document.getElementById('sale-seller').value.trim();
+    
+    if (!dateInput) {
+        showError('Укажите дату продажи');
+        return;
+    }
+    if (!sellerInput) {
+        showError('Укажите продавца');
+        return;
+    }
+
     const totalAmount = currentSaleItems.reduce((sum, item) => sum + item.finalPrice * item.quantity, 0);
 
     btn.disabled = true;
@@ -485,8 +545,8 @@ window.saveSale = async function(btn) {
                     total: item.finalPrice * item.quantity
                 })),
                 totalAmount: totalAmount,
-                seller: window.currentUser.name,
-                date: new Date().toISOString()
+                seller: sellerInput,
+                date: new Date(dateInput).toISOString()
             }
         );
 
@@ -518,6 +578,18 @@ window.saveSale = async function(btn) {
 window.updateSale = async function(saleId, btn) {
     if (currentSaleItems.length === 0) {
         showError('Добавьте хотя бы один товар в корзину');
+        return;
+    }
+
+    const dateInput = document.getElementById('sale-date').value;
+    const sellerInput = document.getElementById('sale-seller').value.trim();
+    
+    if (!dateInput) {
+        showError('Укажите дату продажи');
+        return;
+    }
+    if (!sellerInput) {
+        showError('Укажите продавца');
         return;
     }
 
@@ -554,7 +626,9 @@ window.updateSale = async function(saleId, btn) {
                     priceType: item.priceType,
                     total: item.finalPrice * item.quantity
                 })),
-                totalAmount: totalAmount
+                totalAmount: totalAmount,
+                seller: sellerInput,
+                date: new Date(dateInput).toISOString()
             }
         );
 
@@ -640,10 +714,13 @@ document.getElementById('add-income-btn').addEventListener('click', () => {
     
     let options = '';
     if (products.length > 0) {
-        options = products.map(p => `<option value="${p.id}">${p.name} (${p.size || '–'})</option>`).join('');
+        options = products.map(p => `<option value="${p.id}">${p.name} (${p.size || '—'})</option>`).join('');
     }
 
     const content = `
+        <label>Дата и время поступления</label>
+        <input type="datetime-local" id="income-date" value="${getCurrentDateTimeLocal()}">
+        
         <label>Товар</label>
         <select id="income-product" required>
             <option value="">-- Выберите товар --</option>
@@ -712,10 +789,19 @@ window.editIncome = async function(incomeId) {
     editingIncomeId = incomeId;
 
     const options = products.map(p => 
-        `<option value="${p.id}" ${p.id === incomeRecord.productId ? 'selected' : ''}>${p.name} (${p.size || '–'})</option>`
+        `<option value="${p.id}" ${p.id === incomeRecord.productId ? 'selected' : ''}>${p.name} (${p.size || '—'})</option>`
     ).join('');
 
+    // Конвертируем ISO дату в datetime-local формат
+    const incomeDate = new Date(incomeRecord.date);
+    const offset = incomeDate.getTimezoneOffset();
+    const localDate = new Date(incomeDate.getTime() - offset * 60000);
+    const dateValue = localDate.toISOString().slice(0, 16);
+
     const content = `
+        <label>Дата и время поступления</label>
+        <input type="datetime-local" id="income-date" value="${dateValue}">
+        
         <label>Товар</label>
         <select id="income-product" required>
             ${options}
@@ -732,6 +818,13 @@ window.editIncome = async function(incomeId) {
 };
 
 window.saveIncome = async function(btn) {
+    const dateInput = document.getElementById('income-date').value;
+    
+    if (!dateInput) {
+        showError('Укажите дату поступления');
+        return;
+    }
+
     const productSelect = document.getElementById('income-product');
     let productId = productSelect.value;
     const quantity = parseInt(document.getElementById('income-quantity').value);
@@ -810,11 +903,11 @@ window.saveIncome = async function(btn) {
             window.firebaseFunctions.collection(window.firebaseDb, 'income'),
             {
                 productId: productId,
-                productName: product ? `${product.name} (${product.size || '–'})` : 'Новый товар',
+                productName: product ? `${product.name} (${product.size || '—'})` : 'Новый товар',
                 quantity: quantity,
                 cost: product ? product.cost : 0,
                 totalAmount: totalAmount,
-                date: new Date().toISOString()
+                date: new Date(dateInput).toISOString()
             }
         );
 
@@ -841,6 +934,13 @@ window.saveIncome = async function(btn) {
 };
 
 window.updateIncome = async function(incomeId, btn) {
+    const dateInput = document.getElementById('income-date').value;
+    
+    if (!dateInput) {
+        showError('Укажите дату поступления');
+        return;
+    }
+
     const productId = document.getElementById('income-product').value;
     const quantity = parseInt(document.getElementById('income-quantity').value);
     
@@ -874,10 +974,11 @@ window.updateIncome = async function(incomeId, btn) {
             window.firebaseFunctions.doc(window.firebaseDb, 'income', incomeId),
             {
                 productId: productId,
-                productName: `${product.name} (${product.size || '–'})`,
+                productName: `${product.name} (${product.size || '—'})`,
                 quantity: quantity,
                 cost: product.cost,
-                totalAmount: totalAmount
+                totalAmount: totalAmount,
+                date: new Date(dateInput).toISOString()
             }
         );
 
@@ -1111,7 +1212,7 @@ function updateProductFilters() {
         sizeSelect.value = currentVal;
     }
 
-    const maxPrice = Math.max(...products.map(p => p.price || 0), 100000);
+    const maxPrice = Math.max(...products.map(p => p.price || 0), 250000);
     const priceMaxInput = document.getElementById('product-price-max');
     if (priceMaxInput) {
         priceMaxInput.max = maxPrice;
@@ -1120,7 +1221,7 @@ function updateProductFilters() {
 }
 
 function updateIncomeFilters() {
-    const maxAmount = Math.max(...income.map(i => i.totalAmount || 0), 1000000);
+    const maxAmount = Math.max(...income.map(i => i.totalAmount || 0), 250000);
     const amountMaxInput = document.getElementById('income-amount-max');
     if (amountMaxInput) {
         amountMaxInput.max = maxAmount;
@@ -1139,7 +1240,7 @@ function updateSalesFilters() {
         sellerSelect.value = currentVal;
     }
 
-    const maxAmount = Math.max(...sales.map(s => s.totalAmount || 0), 1000000);
+    const maxAmount = Math.max(...sales.map(s => s.totalAmount || 0), 250000);
     const amountMaxInput = document.getElementById('sales-amount-max');
     if (amountMaxInput) {
         amountMaxInput.max = maxAmount;
@@ -1273,15 +1374,15 @@ document.getElementById('product-price-max')?.addEventListener('input', (e) => {
 });
 
 window.resetProductFilters = function() {
-    productFilters = { search: '', category: '', gender: '', brand: '', size: '', priceMin: 0, priceMax: 100000 };
+    productFilters = { search: '', category: '', gender: '', brand: '', size: '', priceMin: 0, priceMax: 250000 };
     document.getElementById('product-search').value = '';
     document.getElementById('product-category-filter').value = '';
     document.getElementById('product-gender-filter').value = '';
     document.getElementById('product-brand-filter').value = '';
     document.getElementById('product-size-filter').value = '';
     document.getElementById('product-price-min').value = 0;
-    document.getElementById('product-price-max').value = 100000;
-    document.getElementById('product-price-range-label').textContent = '0 - 100000 ₽';
+    document.getElementById('product-price-max').value = 250000;
+    document.getElementById('product-price-range-label').textContent = '0 - 250000 ₽';
     renderProducts();
 };
 
@@ -1326,13 +1427,13 @@ document.getElementById('income-amount-max')?.addEventListener('input', (e) => {
 });
 
 window.resetIncomeFilters = function() {
-    incomeFilters = { search: '', dateFrom: '', dateTo: '', amountMin: 0, amountMax: 1000000 };
+    incomeFilters = { search: '', dateFrom: '', dateTo: '', amountMin: 0, amountMax: 250000 };
     document.getElementById('income-search').value = '';
     document.getElementById('income-date-from').value = '';
     document.getElementById('income-date-to').value = '';
     document.getElementById('income-amount-min').value = 0;
-    document.getElementById('income-amount-max').value = 1000000;
-    document.getElementById('income-amount-range-label').textContent = '0 - 1000000 ₽';
+    document.getElementById('income-amount-max').value = 250000;
+    document.getElementById('income-amount-range-label').textContent = '0 - 250000 ₽';
     renderIncome();
 };
 
@@ -1382,14 +1483,14 @@ document.getElementById('sales-amount-max')?.addEventListener('input', (e) => {
 });
 
 window.resetSalesFilters = function() {
-    salesFilters = { search: '', dateFrom: '', dateTo: '', seller: '', amountMin: 0, amountMax: 1000000 };
+    salesFilters = { search: '', dateFrom: '', dateTo: '', seller: '', amountMin: 0, amountMax: 250000 };
     document.getElementById('sales-search').value = '';
     document.getElementById('sales-date-from').value = '';
     document.getElementById('sales-date-to').value = '';
     document.getElementById('sales-seller-filter').value = '';
     document.getElementById('sales-amount-min').value = 0;
-    document.getElementById('sales-amount-max').value = 1000000;
-    document.getElementById('sales-amount-range-label').textContent = '0 - 1000000 ₽';
+    document.getElementById('sales-amount-max').value = 250000;
+    document.getElementById('sales-amount-range-label').textContent = '0 - 250000 ₽';
     renderSales();
 };
 

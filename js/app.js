@@ -1,10 +1,14 @@
-// Инициализация темы
+// Инициализация темы (по умолчанию светлая)
 function initTheme() {
     const savedTheme = localStorage.getItem('theme');
-    if (savedTheme === 'light') {
+    const theme = savedTheme || 'light'; // по умолчанию светлая
+    
+    if (theme === 'light') {
         document.body.classList.add('light-theme');
-        updateThemeIcons('light');
+    } else {
+        document.body.classList.remove('light-theme');
     }
+    updateThemeIcons(theme);
 }
 
 function toggleTheme() {
@@ -144,7 +148,7 @@ async function showApp(user) {
         loadPlans()
     ]);
     
-    // Остаёмся на welcome экране - пользователь сам выберет раздел
+    // Остаёмся на welcome экране
 }
 
 function switchSection(sectionName) {
