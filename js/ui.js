@@ -495,7 +495,9 @@ function renderDistributionChart() {
             { label: '1 000 - 3 000 ₽', min: 1000, max: 3000 },
             { label: '3 000 - 5 000 ₽', min: 3000, max: 5000 },
             { label: '5 000 - 10 000 ₽', min: 5000, max: 10000 },
-            { label: 'Более 10 000 ₽', min: 10000, max: Infinity }
+            { label: '10 000 - 20 000 ₽', min: 10000, max: 20000 },
+            { label: '20 000 - 50 000 ₽', min: 10000, max: 50000 },
+            { label: 'Более 50 000 ₽', min: 10000, max: Infinity }
         ];
         ranges.forEach(r => {
             const count = inStockProducts.filter(p => p.price >= r.min && p.price < r.max).reduce((sum, p) => sum + p.stock, 0);
