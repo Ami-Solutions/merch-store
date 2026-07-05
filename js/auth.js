@@ -1,7 +1,7 @@
 document.getElementById('login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     
-    const email = document.getElementById('login-email').value;
+    const email = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
     const submitBtn = e.target.querySelector('button[type="submit"]');
 
@@ -42,7 +42,6 @@ async function loadUserData(user) {
         if (userData.role !== 'owner') {
             document.getElementById('plans-link').parentElement.style.display = 'none';
             document.getElementById('users-link').parentElement.style.display = 'none';
-            // Скрываем и в мобильном меню
             document.getElementById('mobile-plans-link').style.display = 'none';
             document.getElementById('mobile-users-link').style.display = 'none';
         }
@@ -93,8 +92,8 @@ document.getElementById('add-user-btn').addEventListener('click', () => {
 });
 
 window.saveUser = async function(btn) {
-    const name = document.getElementById('user-name').value;
-    const email = document.getElementById('user-email').value;
+    const name = document.getElementById('user-name').value.trim();
+    const email = document.getElementById('user-email').value.trim();
     const password = document.getElementById('user-password').value;
     const role = document.getElementById('user-role-select').value;
 

@@ -48,6 +48,78 @@ function getCurrentDateTimeLocal() {
     return local.toISOString().slice(0, 16);
 }
 
+// === УТИЛИТЫ ДЛЯ ПОЛУЧЕНИЯ СУЩЕСТВУЮЩИХ ЗНАЧЕНИЙ ===
+function getUniqueValues(field) {
+    const values = [...new Set(products.map(p => p[field]).filter(v => v && v.trim()))];
+    return values.sort();
+}
+
+function generateDatalistHTML() {
+    const categories = getUniqueValues('category');
+    const brands = getUniqueValues('brand');
+    const sizes = getUniqueValues('size');
+    
+    return `
+        <datalist id="category-list">
+            ${categories.map(c => `<option value="${c}">`).join('')}
+        </datalist>
+        <datalist id="brand-list">
+            ${brands.map(b => `<option value="${b}">`).join('')}
+        </datalist>
+        <datalist id="size-list">
+            ${sizes.map(s => `<option value="${s}">`).join('')}
+        </datalist>
+    `;
+}
+
+// === КНОПКА ДЛЯ РАЗРАБОТЧИКА: TRIM ВСЕХ ЗАПИСЕЙ ===
+window.trimAllProducts = async function(btn) {
+    if (!confirm('Обрезать лишние пробелы во всех записях товаров?')) return;
+    
+    btn.disabled = true;
+    btn.textContent = 'Обработка...';
+    
+    let updated = 0;
+    
+    try {
+        for (const product of products) {
+            const updates = {};
+            let needsUpdate = false;
+            
+            // Проверяем все строковые поля
+            const stringFields = ['name', 'category', 'brand', 'size'];
+            
+            for (const field of stringFields) {
+                if (product[field] && typeof product[field] === 'string') {
+                    const trimmed = product[field].trim();
+                    if (trimmed !== product[field]) {
+                        updates[field] = trimmed;
+                        needsUpdate = true;
+                    }
+                }
+            }
+            
+            if (needsUpdate) {
+                await window.firebaseFunctions.updateDoc(
+                    window.firebaseFunctions.doc(window.firebaseDb, 'products', product.id),
+                    updates
+                );
+                updated++;
+            }
+        }
+        
+        await loadProducts();
+        alert(`Готово! Обновлено записей: ${updated}`);
+        
+    } catch (error) {
+        showError('Ошибка при обработке');
+        console.error(error);
+    }
+    
+    btn.disabled = false;
+    btn.textContent = 'Обрезать лишние пробелы по всем записям';
+};
+
 // === ТОВАРЫ ===
 async function loadProducts() {
     const productsRef = window.firebaseFunctions.collection(window.firebaseDb, 'products');
@@ -63,15 +135,19 @@ async function loadProducts() {
 }
 
 document.getElementById('add-product-btn').addEventListener('click', () => {
+    const datalists = generateDatalistHTML();
+    
     const content = `
+        ${datalists}
+        
         <label>Название (обязательно)</label>
         <input type="text" id="product-name" required>
         
         <label>Категория</label>
-        <input type="text" id="product-category">
+        <input type="text" id="product-category" list="category-list" placeholder="Выберите или введите новое">
         
         <label>Бренд</label>
-        <input type="text" id="product-brand">
+        <input type="text" id="product-brand" list="brand-list" placeholder="Выберите или введите новое">
         
         <label>Пол</label>
         <select id="product-gender">
@@ -82,7 +158,7 @@ document.getElementById('add-product-btn').addEventListener('click', () => {
         </select>
         
         <label>Размер</label>
-        <input type="text" id="product-size">
+        <input type="text" id="product-size" list="size-list" placeholder="Выберите или введите новое">
         
         <label>Цена закупки</label>
         <input type="number" id="product-cost">
@@ -105,15 +181,19 @@ window.editProduct = function(productId) {
     const product = products.find(p => p.id === productId);
     if (!product) return;
 
+    const datalists = generateDatalistHTML();
+
     const content = `
+        ${datalists}
+        
         <label>Название (обязательно)</label>
         <input type="text" id="product-name" value="${product.name || ''}" required>
         
         <label>Категория</label>
-        <input type="text" id="product-category" value="${product.category || ''}">
+        <input type="text" id="product-category" list="category-list" value="${product.category || ''}" placeholder="Выберите или введите новое">
         
         <label>Бренд</label>
-        <input type="text" id="product-brand" value="${product.brand || ''}">
+        <input type="text" id="product-brand" list="brand-list" value="${product.brand || ''}" placeholder="Выберите или введите новое">
         
         <label>Пол</label>
         <select id="product-gender">
@@ -124,7 +204,7 @@ window.editProduct = function(productId) {
         </select>
         
         <label>Размер</label>
-        <input type="text" id="product-size" value="${product.size || ''}">
+        <input type="text" id="product-size" list="size-list" value="${product.size || ''}" placeholder="Выберите или введите новое">
         
         <label>Цена закупки</label>
         <input type="number" id="product-cost" value="${product.cost || ''}">
@@ -144,17 +224,17 @@ window.editProduct = function(productId) {
 };
 
 window.saveProduct = async function(btn) {
-    const name = document.getElementById('product-name').value;
+    const name = document.getElementById('product-name').value.trim();
     
     if (!name) {
         showError('Название обязательно');
         return;
     }
 
-    const category = document.getElementById('product-category').value || '';
-    const brand = document.getElementById('product-brand').value || '';
+    const category = document.getElementById('product-category').value.trim();
+    const brand = document.getElementById('product-brand').value.trim();
     const gender = document.getElementById('product-gender').value || '';
-    const size = document.getElementById('product-size').value || '';
+    const size = document.getElementById('product-size').value.trim();
     const cost = parseFloat(document.getElementById('product-cost').value) || 0;
     const price = parseFloat(document.getElementById('product-price').value) || 0;
     const discount = parseFloat(document.getElementById('product-discount').value) || 0;
@@ -185,17 +265,17 @@ window.saveProduct = async function(btn) {
 };
 
 window.updateProduct = async function(productId, btn) {
-    const name = document.getElementById('product-name').value;
+    const name = document.getElementById('product-name').value.trim();
     
     if (!name) {
         showError('Название обязательно');
         return;
     }
 
-    const category = document.getElementById('product-category').value || '';
-    const brand = document.getElementById('product-brand').value || '';
+    const category = document.getElementById('product-category').value.trim();
+    const brand = document.getElementById('product-brand').value.trim();
     const gender = document.getElementById('product-gender').value || '';
-    const size = document.getElementById('product-size').value || '';
+    const size = document.getElementById('product-size').value.trim();
     const cost = parseFloat(document.getElementById('product-cost').value) || 0;
     const price = parseFloat(document.getElementById('product-price').value) || 0;
     const discount = parseFloat(document.getElementById('product-discount').value) || 0;
@@ -311,8 +391,6 @@ window.editSale = function(saleId) {
     currentSaleItems = sale.items.map(item => {
         const product = products.find(p => p.id === item.productId);
         const currentStock = product ? product.stock : 0;
-        // К текущему остатку на складе добавляем количество из этой продажи
-        // (как будто мы "возвращаем" товар на склад для возможности редактирования)
         const maxStock = currentStock + item.quantity;
         
         return {
@@ -329,13 +407,11 @@ window.editSale = function(saleId) {
     });
 
     const allProducts = products.map(p => {
-        // Для товаров, которые уже в корзине этой продажи, увеличиваем доступный остаток
         const itemInSale = sale.items.find(i => i.productId === p.id);
         const availableStock = p.stock + (itemInSale ? itemInSale.quantity : 0);
         return `<option value="${p.id}">${p.name} (${p.size || '—'}) — Остаток: ${availableStock}</option>`;
     }).join('');
 
-    // Конвертируем ISO дату в datetime-local формат
     const saleDate = new Date(sale.date);
     const offset = saleDate.getTimezoneOffset();
     const localDate = new Date(saleDate.getTime() - offset * 60000);
@@ -602,7 +678,6 @@ window.updateSale = async function(saleId, btn) {
     btn.textContent = 'Сохранение...';
 
     try {
-        // Откатываем старые остатки
         for (const oldItem of oldSale.items) {
             const product = products.find(p => p.id === oldItem.productId);
             if (product) {
@@ -614,7 +689,6 @@ window.updateSale = async function(saleId, btn) {
             }
         }
 
-        // Обновляем продажу
         await window.firebaseFunctions.updateDoc(
             window.firebaseFunctions.doc(window.firebaseDb, 'sales', saleId),
             {
@@ -632,7 +706,6 @@ window.updateSale = async function(saleId, btn) {
             }
         );
 
-        // Применяем новые остатки
         for (const item of currentSaleItems) {
             const product = products.find(p => p.id === item.productId);
             if (product) {
@@ -717,6 +790,8 @@ document.getElementById('add-income-btn').addEventListener('click', () => {
         options = products.map(p => `<option value="${p.id}">${p.name} (${p.size || '—'})</option>`).join('');
     }
 
+    const datalists = generateDatalistHTML();
+
     const content = `
         <label>Дата и время поступления</label>
         <input type="datetime-local" id="income-date" value="${getCurrentDateTimeLocal()}">
@@ -734,13 +809,14 @@ document.getElementById('add-income-btn').addEventListener('click', () => {
         </div>
         
         <div id="new-product-form" style="display: none;">
+            ${datalists}
             <div class="divider">Новый товар</div>
             <label>Название (обязательно)</label>
             <input type="text" id="new-product-name">
             <label>Категория</label>
-            <input type="text" id="new-product-category">
+            <input type="text" id="new-product-category" list="category-list" placeholder="Выберите или введите новое">
             <label>Бренд</label>
-            <input type="text" id="new-product-brand">
+            <input type="text" id="new-product-brand" list="brand-list" placeholder="Выберите или введите новое">
             <label>Пол</label>
             <select id="new-product-gender">
                 <option value="">Не указан</option>
@@ -749,7 +825,7 @@ document.getElementById('add-income-btn').addEventListener('click', () => {
                 <option value="unisex">Унисекс</option>
             </select>
             <label>Размер</label>
-            <input type="text" id="new-product-size">
+            <input type="text" id="new-product-size" list="size-list" placeholder="Выберите или введите новое">
             <label>Цена закупки</label>
             <input type="number" id="new-product-cost">
             <label>Цена продажи</label>
@@ -792,7 +868,6 @@ window.editIncome = async function(incomeId) {
         `<option value="${p.id}" ${p.id === incomeRecord.productId ? 'selected' : ''}>${p.name} (${p.size || '—'})</option>`
     ).join('');
 
-    // Конвертируем ISO дату в datetime-local формат
     const incomeDate = new Date(incomeRecord.date);
     const offset = incomeDate.getTimezoneOffset();
     const localDate = new Date(incomeDate.getTime() - offset * 60000);
@@ -830,17 +905,17 @@ window.saveIncome = async function(btn) {
     const quantity = parseInt(document.getElementById('income-quantity').value);
     
     if (productId === 'new') {
-        const newName = document.getElementById('new-product-name').value;
+        const newName = document.getElementById('new-product-name').value.trim();
         
         if (!newName) {
             showError('Название нового товара обязательно');
             return;
         }
 
-        const newCategory = document.getElementById('new-product-category').value || '';
-        const newBrand = document.getElementById('new-product-brand').value || '';
+        const newCategory = document.getElementById('new-product-category').value.trim();
+        const newBrand = document.getElementById('new-product-brand').value.trim();
         const newGender = document.getElementById('new-product-gender').value || '';
-        const newSize = document.getElementById('new-product-size').value || '';
+        const newSize = document.getElementById('new-product-size').value.trim();
         const newCost = parseFloat(document.getElementById('new-product-cost').value) || 0;
         const newPrice = parseFloat(document.getElementById('new-product-price').value) || 0;
         const newDiscount = parseFloat(document.getElementById('new-product-discount').value) || 0;
@@ -959,7 +1034,6 @@ window.updateIncome = async function(incomeId, btn) {
     btn.textContent = 'Сохранение...';
 
     try {
-        // Откатываем старое поступление
         const oldProduct = products.find(p => p.id === oldIncome.productId);
         if (oldProduct) {
             const newStock = Math.max(0, oldProduct.stock - oldIncome.quantity);
@@ -969,7 +1043,6 @@ window.updateIncome = async function(incomeId, btn) {
             );
         }
 
-        // Обновляем запись
         await window.firebaseFunctions.updateDoc(
             window.firebaseFunctions.doc(window.firebaseDb, 'income', incomeId),
             {
@@ -982,7 +1055,6 @@ window.updateIncome = async function(incomeId, btn) {
             }
         );
 
-        // Применяем новое поступление
         const updatedProduct = products.find(p => p.id === productId);
         if (updatedProduct) {
             const newStock = updatedProduct.stock + quantity;
@@ -1096,7 +1168,7 @@ window.editPlan = function(planId) {
 };
 
 window.savePlan = async function(btn) {
-    const name = document.getElementById('plan-name').value;
+    const name = document.getElementById('plan-name').value.trim();
     const startDate = document.getElementById('plan-start').value;
     const endDate = document.getElementById('plan-end').value;
     const target = parseFloat(document.getElementById('plan-target').value);
@@ -1131,7 +1203,7 @@ window.savePlan = async function(btn) {
 };
 
 window.updatePlan = async function(planId, btn) {
-    const name = document.getElementById('plan-name').value;
+    const name = document.getElementById('plan-name').value.trim();
     const startDate = document.getElementById('plan-start').value;
     const endDate = document.getElementById('plan-end').value;
     const target = parseFloat(document.getElementById('plan-target').value);
