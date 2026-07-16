@@ -23,6 +23,23 @@ function getGenderLabel(gender) {
     return labels[gender] || '—';
 }
 
+// === Получить факт продаж с учётом продавца плана ===
+function getFactForPlan(plan) {
+    const start = new Date(plan.startDate);
+    const end = new Date(plan.endDate);
+    end.setHours(23, 59, 59, 999);
+    
+    return sales
+        .filter(s => {
+            const saleDate = new Date(s.date);
+            if (saleDate < start || saleDate > end) return false;
+            // Если план привязан к конкретному продавцу — фильтруем
+            if (plan.assignedSeller && s.seller !== plan.assignedSeller) return false;
+            return true;
+        })
+        .reduce((sum, s) => sum + s.totalAmount, 0);
+}
+
 function renderProducts() {
     const tbody = document.getElementById('products-tbody');
     const filtered = getFilteredProducts();
@@ -96,18 +113,9 @@ function renderPlans() {
     const filtered = getFilteredPlans();
     
     tbody.innerHTML = filtered.map(plan => {
-        const start = new Date(plan.startDate);
-        const end = new Date(plan.endDate);
-        end.setHours(23, 59, 59, 999);
-        
-        const fact = sales
-            .filter(s => {
-                const saleDate = new Date(s.date);
-                return saleDate >= start && saleDate <= end;
-            })
-            .reduce((sum, s) => sum + s.totalAmount, 0);
-            
+        const fact = getFactForPlan(plan);
         const percent = plan.targetAmount > 0 ? (fact / plan.targetAmount * 100).toFixed(1) : 0;
+        const sellerLabel = plan.assignedSeller || 'Общий';
         
         return `
             <tr>
@@ -115,6 +123,7 @@ function renderPlans() {
                     ${plan.name}<br>
                     <small style="color: var(--text-secondary)">${formatDateShort(plan.startDate)} — ${formatDateShort(plan.endDate)}</small>
                 </td>
+                <td>${sellerLabel}</td>
                 <td>${formatCurrency(plan.targetAmount)}</td>
                 <td>${formatCurrency(fact)}</td>
                 <td>
@@ -140,57 +149,43 @@ function renderPlansOverview() {
     const container = document.getElementById('plans-overview');
     if (!container) return;
 
-    if (plans.length === 0) {
-        container.innerHTML = '<div class="plan-card-empty">Нет активных планов. Установите план в разделе "Планы".</div>';
-        return;
-    }
-
     const now = new Date();
-    const currentPlan = plans.find(p => {
+    
+    // Фильтруем только актуальные (текущие) планы
+    const currentPlans = plans.filter(p => {
         const start = new Date(p.startDate);
         const end = new Date(p.endDate);
         end.setHours(23, 59, 59, 999);
         return now >= start && now <= end;
     });
 
-    const pastPlans = plans
-        .filter(p => new Date(p.endDate) < now)
-        .sort((a, b) => new Date(b.endDate) - new Date(a.endDate))
-        .slice(0, 1);
+    if (currentPlans.length === 0) {
+        container.innerHTML = '<div class="plan-card-empty">Нет активных планов. Установите план в разделе "Планы".</div>';
+        return;
+    }
 
     let html = '';
-
-    if (currentPlan) {
-        const fact = getSalesForPeriod(currentPlan.startDate, currentPlan.endDate);
-        const percent = currentPlan.targetAmount > 0 ? (fact / currentPlan.targetAmount * 100).toFixed(1) : 0;
-        html += renderPlanCard(currentPlan, fact, percent, true);
-    }
-
-    if (pastPlans.length > 0) {
-        const pastPlan = pastPlans[0];
-        const fact = getSalesForPeriod(pastPlan.startDate, pastPlan.endDate);
-        const percent = pastPlan.targetAmount > 0 ? (fact / pastPlan.targetAmount * 100).toFixed(1) : 0;
-        html += renderPlanCard(pastPlan, fact, percent, false);
-    }
-
-    if (!html) {
-        html = '<div class="plan-card-empty">Нет текущего или завершённых планов</div>';
-    }
+    currentPlans.forEach(plan => {
+        const fact = getFactForPlan(plan);
+        const percent = plan.targetAmount > 0 ? (fact / plan.targetAmount * 100).toFixed(1) : 0;
+        html += renderPlanCard(plan, fact, percent);
+    });
 
     container.innerHTML = html;
 }
 
-function renderPlanCard(plan, fact, percent, isCurrent) {
+function renderPlanCard(plan, fact, percent) {
+    const sellerLabel = plan.assignedSeller ? `Продавец: ${plan.assignedSeller}` : 'Общий план';
+    
     return `
         <div class="plan-card">
             <div class="plan-card-header">
                 <div class="plan-card-title">${plan.name}</div>
-                <span class="plan-card-status ${isCurrent ? 'current' : 'past'}">
-                    ${isCurrent ? 'Текущий' : 'Прошлый'}
-                </span>
+                <span class="plan-card-status current">Текущий</span>
             </div>
             <div class="plan-card-period">
-                ${formatDateShort(plan.startDate)} — ${formatDateShort(plan.endDate)}
+                ${formatDateShort(plan.startDate)} — ${formatDateShort(plan.endDate)}<br>
+                <small style="color: var(--text-secondary)">${sellerLabel}</small>
             </div>
             <div class="plan-card-progress">
                 <div class="plan-card-progress-bar">

@@ -2,6 +2,7 @@ let products = [];
 let sales = [];
 let income = [];
 let plans = [];
+let allUsers = [];
 let currentSaleItems = [];
 let editingSaleId = null;
 let editingIncomeId = null;
@@ -14,7 +15,7 @@ let productFilters = {
     brand: '',
     size: '',
     priceMin: 0,
-    priceMax: 250000
+    priceMax: 1000000
 };
 
 let incomeFilters = {
@@ -22,7 +23,7 @@ let incomeFilters = {
     dateFrom: '',
     dateTo: '',
     amountMin: 0,
-    amountMax: 250000
+    amountMax: 1000000
 };
 
 let salesFilters = {
@@ -31,11 +32,12 @@ let salesFilters = {
     dateTo: '',
     seller: '',
     amountMin: 0,
-    amountMax: 250000
+    amountMax: 1000000
 };
 
 let planFilters = {
     search: '',
+    seller: '',
     dateFrom: '',
     dateTo: ''
 };
@@ -70,6 +72,31 @@ function generateDatalistHTML() {
             ${sizes.map(s => `<option value="${s}">`).join('')}
         </datalist>
     `;
+}
+
+// === ЗАГРУЗКА ПОЛЬЗОВАТЕЛЕЙ (для планов) ===
+async function loadAllUsers() {
+    try {
+        const usersRef = window.firebaseFunctions.collection(window.firebaseDb, 'users');
+        const querySnapshot = await window.firebaseFunctions.getDocs(usersRef);
+        allUsers = [];
+        querySnapshot.forEach((doc) => {
+            allUsers.push({ id: doc.id, ...doc.data() });
+        });
+    } catch (error) {
+        console.error('Ошибка загрузки пользователей:', error);
+        allUsers = [];
+    }
+}
+
+function getSellerOptionsHTML(selectedSeller) {
+    const selected = selectedSeller || '';
+    let html = `<option value="" ${selected === '' ? 'selected' : ''}>Общий (все продавцы)</option>`;
+    allUsers.forEach(user => {
+        const isSelected = selected === user.name ? 'selected' : '';
+        html += `<option value="${user.name}" ${isSelected}>${user.name}</option>`;
+    });
+    return html;
 }
 
 // === КНОПКА ДЛЯ РАЗРАБОТЧИКА: TRIM ВСЕХ ЗАПИСЕЙ ===
@@ -391,6 +418,8 @@ window.editSale = function(saleId) {
     currentSaleItems = sale.items.map(item => {
         const product = products.find(p => p.id === item.productId);
         const currentStock = product ? product.stock : 0;
+        // К текущему остатку на складе добавляем количество из этой продажи
+        // (как будто мы "возвращаем" товар на склад для возможности редактирования)
         const maxStock = currentStock + item.quantity;
         
         return {
@@ -407,11 +436,13 @@ window.editSale = function(saleId) {
     });
 
     const allProducts = products.map(p => {
+        // Для товаров, которые уже в корзине этой продажи, увеличиваем доступный остаток
         const itemInSale = sale.items.find(i => i.productId === p.id);
         const availableStock = p.stock + (itemInSale ? itemInSale.quantity : 0);
         return `<option value="${p.id}">${p.name} (${p.size || '—'}) — Остаток: ${availableStock}</option>`;
     }).join('');
 
+    // Конвертируем ISO дату в datetime-local формат
     const saleDate = new Date(sale.date);
     const offset = saleDate.getTimezoneOffset();
     const localDate = new Date(saleDate.getTime() - offset * 60000);
@@ -678,6 +709,7 @@ window.updateSale = async function(saleId, btn) {
     btn.textContent = 'Сохранение...';
 
     try {
+        // Откатываем старые остатки
         for (const oldItem of oldSale.items) {
             const product = products.find(p => p.id === oldItem.productId);
             if (product) {
@@ -689,6 +721,7 @@ window.updateSale = async function(saleId, btn) {
             }
         }
 
+        // Обновляем продажу
         await window.firebaseFunctions.updateDoc(
             window.firebaseFunctions.doc(window.firebaseDb, 'sales', saleId),
             {
@@ -706,6 +739,7 @@ window.updateSale = async function(saleId, btn) {
             }
         );
 
+        // Применяем новые остатки
         for (const item of currentSaleItems) {
             const product = products.find(p => p.id === item.productId);
             if (product) {
@@ -868,6 +902,7 @@ window.editIncome = async function(incomeId) {
         `<option value="${p.id}" ${p.id === incomeRecord.productId ? 'selected' : ''}>${p.name} (${p.size || '—'})</option>`
     ).join('');
 
+    // Конвертируем ISO дату в datetime-local формат
     const incomeDate = new Date(incomeRecord.date);
     const offset = incomeDate.getTimezoneOffset();
     const localDate = new Date(incomeDate.getTime() - offset * 60000);
@@ -1034,6 +1069,7 @@ window.updateIncome = async function(incomeId, btn) {
     btn.textContent = 'Сохранение...';
 
     try {
+        // Откатываем старое поступление
         const oldProduct = products.find(p => p.id === oldIncome.productId);
         if (oldProduct) {
             const newStock = Math.max(0, oldProduct.stock - oldIncome.quantity);
@@ -1043,6 +1079,7 @@ window.updateIncome = async function(incomeId, btn) {
             );
         }
 
+        // Обновляем запись
         await window.firebaseFunctions.updateDoc(
             window.firebaseFunctions.doc(window.firebaseDb, 'income', incomeId),
             {
@@ -1055,6 +1092,7 @@ window.updateIncome = async function(incomeId, btn) {
             }
         );
 
+        // Применяем новое поступление
         const updatedProduct = products.find(p => p.id === productId);
         if (updatedProduct) {
             const newStock = updatedProduct.stock + quantity;
@@ -1113,6 +1151,8 @@ window.deleteIncome = async function(incomeId, btn) {
 
 // === ПЛАНЫ ===
 async function loadPlans() {
+    await loadAllUsers(); // Загружаем пользователей для выпадающего списка
+    
     const plansRef = window.firebaseFunctions.collection(window.firebaseDb, 'plans');
     const q = window.firebaseFunctions.query(plansRef, window.firebaseFunctions.orderBy('createdAt', 'desc'));
     const querySnapshot = await window.firebaseFunctions.getDocs(q);
@@ -1127,9 +1167,14 @@ async function loadPlans() {
 }
 
 document.getElementById('add-plan-btn').addEventListener('click', () => {
+    const sellerOptions = getSellerOptionsHTML('');
+    
     const content = `
         <label>Название периода</label>
         <input type="text" id="plan-name" placeholder="Например: Июль 2026" required>
+        
+        <label>Для кого</label>
+        <select id="plan-seller">${sellerOptions}</select>
         
         <label>Дата начала</label>
         <input type="date" id="plan-start" required>
@@ -1149,9 +1194,14 @@ window.editPlan = function(planId) {
     const plan = plans.find(p => p.id === planId);
     if (!plan) return;
 
+    const sellerOptions = getSellerOptionsHTML(plan.assignedSeller || '');
+
     const content = `
         <label>Название периода</label>
         <input type="text" id="plan-name" value="${plan.name}" required>
+        
+        <label>Для кого</label>
+        <select id="plan-seller">${sellerOptions}</select>
         
         <label>Дата начала</label>
         <input type="date" id="plan-start" value="${plan.startDate}" required>
@@ -1169,6 +1219,7 @@ window.editPlan = function(planId) {
 
 window.savePlan = async function(btn) {
     const name = document.getElementById('plan-name').value.trim();
+    const assignedSeller = document.getElementById('plan-seller').value.trim();
     const startDate = document.getElementById('plan-start').value;
     const endDate = document.getElementById('plan-end').value;
     const target = parseFloat(document.getElementById('plan-target').value);
@@ -1185,7 +1236,7 @@ window.savePlan = async function(btn) {
         await window.firebaseFunctions.addDoc(
             window.firebaseFunctions.collection(window.firebaseDb, 'plans'),
             {
-                name, startDate, endDate,
+                name, assignedSeller, startDate, endDate,
                 targetAmount: target,
                 createdAt: new Date().toISOString()
             }
@@ -1204,6 +1255,7 @@ window.savePlan = async function(btn) {
 
 window.updatePlan = async function(planId, btn) {
     const name = document.getElementById('plan-name').value.trim();
+    const assignedSeller = document.getElementById('plan-seller').value.trim();
     const startDate = document.getElementById('plan-start').value;
     const endDate = document.getElementById('plan-end').value;
     const target = parseFloat(document.getElementById('plan-target').value);
@@ -1219,7 +1271,7 @@ window.updatePlan = async function(planId, btn) {
     try {
         await window.firebaseFunctions.updateDoc(
             window.firebaseFunctions.doc(window.firebaseDb, 'plans', planId),
-            { name, startDate, endDate, targetAmount: target }
+            { name, assignedSeller, startDate, endDate, targetAmount: target }
         );
         
         closeModal();
@@ -1284,7 +1336,7 @@ function updateProductFilters() {
         sizeSelect.value = currentVal;
     }
 
-    const maxPrice = Math.max(...products.map(p => p.price || 0), 250000);
+    const maxPrice = Math.max(...products.map(p => p.price || 0), 1000000);
     const priceMaxInput = document.getElementById('product-price-max');
     if (priceMaxInput) {
         priceMaxInput.max = maxPrice;
@@ -1293,7 +1345,7 @@ function updateProductFilters() {
 }
 
 function updateIncomeFilters() {
-    const maxAmount = Math.max(...income.map(i => i.totalAmount || 0), 250000);
+    const maxAmount = Math.max(...income.map(i => i.totalAmount || 0), 1000000);
     const amountMaxInput = document.getElementById('income-amount-max');
     if (amountMaxInput) {
         amountMaxInput.max = maxAmount;
@@ -1312,11 +1364,22 @@ function updateSalesFilters() {
         sellerSelect.value = currentVal;
     }
 
-    const maxAmount = Math.max(...sales.map(s => s.totalAmount || 0), 250000);
+    const maxAmount = Math.max(...sales.map(s => s.totalAmount || 0), 1000000);
     const amountMaxInput = document.getElementById('sales-amount-max');
     if (amountMaxInput) {
         amountMaxInput.max = maxAmount;
         document.getElementById('sales-amount-min').max = maxAmount;
+    }
+}
+
+function updatePlanFilters() {
+    const ps = document.getElementById('plan-seller-filter');
+    if (ps) {
+        const v = ps.value;
+        let html = '<option value="">Все</option><option value="__all__">Общие</option>';
+        allUsers.forEach(u => { html += `<option value="${u.name}">${u.name}</option>`; });
+        ps.innerHTML = html;
+        ps.value = v;
     }
 }
 
@@ -1380,6 +1443,13 @@ function getFilteredSales() {
 function getFilteredPlans() {
     return plans.filter(p => {
         if (planFilters.search && !p.name.toLowerCase().includes(planFilters.search.toLowerCase())) return false;
+        if (planFilters.seller) {
+            if (planFilters.seller === '__all__') { 
+                if (p.assignedSeller) return false; 
+            } else { 
+                if (p.assignedSeller !== planFilters.seller) return false; 
+            }
+        }
         if (planFilters.dateFrom) {
             const fromDate = new Date(planFilters.dateFrom);
             const planStart = new Date(p.startDate);
@@ -1446,15 +1516,15 @@ document.getElementById('product-price-max')?.addEventListener('input', (e) => {
 });
 
 window.resetProductFilters = function() {
-    productFilters = { search: '', category: '', gender: '', brand: '', size: '', priceMin: 0, priceMax: 250000 };
+    productFilters = { search: '', category: '', gender: '', brand: '', size: '', priceMin: 0, priceMax: 1000000 };
     document.getElementById('product-search').value = '';
     document.getElementById('product-category-filter').value = '';
     document.getElementById('product-gender-filter').value = '';
     document.getElementById('product-brand-filter').value = '';
     document.getElementById('product-size-filter').value = '';
     document.getElementById('product-price-min').value = 0;
-    document.getElementById('product-price-max').value = 250000;
-    document.getElementById('product-price-range-label').textContent = '0 - 250000 ₽';
+    document.getElementById('product-price-max').value = 1000000;
+    document.getElementById('product-price-range-label').textContent = '0 - 1000000 ₽';
     renderProducts();
 };
 
@@ -1499,13 +1569,13 @@ document.getElementById('income-amount-max')?.addEventListener('input', (e) => {
 });
 
 window.resetIncomeFilters = function() {
-    incomeFilters = { search: '', dateFrom: '', dateTo: '', amountMin: 0, amountMax: 250000 };
+    incomeFilters = { search: '', dateFrom: '', dateTo: '', amountMin: 0, amountMax: 1000000 };
     document.getElementById('income-search').value = '';
     document.getElementById('income-date-from').value = '';
     document.getElementById('income-date-to').value = '';
     document.getElementById('income-amount-min').value = 0;
-    document.getElementById('income-amount-max').value = 250000;
-    document.getElementById('income-amount-range-label').textContent = '0 - 250000 ₽';
+    document.getElementById('income-amount-max').value = 1000000;
+    document.getElementById('income-amount-range-label').textContent = '0 - 1000000 ₽';
     renderIncome();
 };
 
@@ -1555,20 +1625,25 @@ document.getElementById('sales-amount-max')?.addEventListener('input', (e) => {
 });
 
 window.resetSalesFilters = function() {
-    salesFilters = { search: '', dateFrom: '', dateTo: '', seller: '', amountMin: 0, amountMax: 250000 };
+    salesFilters = { search: '', dateFrom: '', dateTo: '', seller: '', amountMin: 0, amountMax: 1000000 };
     document.getElementById('sales-search').value = '';
     document.getElementById('sales-date-from').value = '';
     document.getElementById('sales-date-to').value = '';
     document.getElementById('sales-seller-filter').value = '';
     document.getElementById('sales-amount-min').value = 0;
-    document.getElementById('sales-amount-max').value = 250000;
-    document.getElementById('sales-amount-range-label').textContent = '0 - 250000 ₽';
+    document.getElementById('sales-amount-max').value = 1000000;
+    document.getElementById('sales-amount-range-label').textContent = '0 - 1000000 ₽';
     renderSales();
 };
 
 // Обработчики фильтров планов
 document.getElementById('plan-search')?.addEventListener('input', (e) => {
     planFilters.search = e.target.value;
+    renderPlans();
+});
+
+document.getElementById('plan-seller-filter')?.addEventListener('change', (e) => {
+    planFilters.seller = e.target.value;
     renderPlans();
 });
 
@@ -1583,8 +1658,9 @@ document.getElementById('plan-date-to')?.addEventListener('change', (e) => {
 });
 
 window.resetPlanFilters = function() {
-    planFilters = { search: '', dateFrom: '', dateTo: '' };
+    planFilters = { search: '', seller: '', dateFrom: '', dateTo: '' };
     document.getElementById('plan-search').value = '';
+    document.getElementById('plan-seller-filter').value = '';
     document.getElementById('plan-date-from').value = '';
     document.getElementById('plan-date-to').value = '';
     renderPlans();
