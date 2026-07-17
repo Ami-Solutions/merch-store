@@ -365,46 +365,43 @@ async function loadSales() {
     updateSalesFilters();
 }
 
+// Обновлённые модальные окна с незаметной кнопкой
 document.getElementById('add-sale-btn').addEventListener('click', () => {
     editingSaleId = null;
-    
     if (products.length === 0) {
         showError('Сначала добавьте товары');
         return;
     }
-
     currentSaleItems = [];
-
     const options = products
         .filter(p => p.stock > 0)
         .map(p => `<option value="${p.id}">${p.name} (${p.size || '—'}) — Остаток: ${p.stock}</option>`)
         .join('');
-
     const content = `
         <label>Дата и время продажи</label>
         <input type="datetime-local" id="sale-date" value="${getCurrentDateTimeLocal()}">
-        
         <label>Продавец</label>
         <input type="text" id="sale-seller" value="${window.currentUser.name || ''}">
-        
         <div class="divider">Товары</div>
-        
         <label>Добавить товар в продажу</label>
         <select id="sale-product-select">
             <option value="">-- Выберите товар --</option>
             ${options}
         </select>
         <button class="btn-small" style="width: 100%; margin-bottom: 16px;" onclick="addSaleItem()">+ Добавить в корзину</button>
-
         <label>Корзина</label>
         <div class="sale-cart" id="sale-cart">
             <div class="sale-cart-empty">Добавьте товары в продажу</div>
         </div>
-
         <div class="sale-total">
             Итого: <span id="sale-total-amount">0 ₽</span>
         </div>
-
+        <div style="margin-top: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 6px;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 0;">
+                <input type="checkbox" id="sale-exclude-stats" style="width: auto; margin: 0;">
+                <span style="font-size: 12px; color: var(--text-secondary);">Убрать продажу из статистики</span>
+            </label>
+        </div>
         <button class="btn-primary" onclick="saveSale(this)">Оформить продажу</button>
     `;
     openModal('Добавить продажу', content);
@@ -413,15 +410,11 @@ document.getElementById('add-sale-btn').addEventListener('click', () => {
 window.editSale = function(saleId) {
     const sale = sales.find(s => s.id === saleId);
     if (!sale || !sale.items) return;
-
     editingSaleId = saleId;
     currentSaleItems = sale.items.map(item => {
         const product = products.find(p => p.id === item.productId);
         const currentStock = product ? product.stock : 0;
-        // К текущему остатку на складе добавляем количество из этой продажи
-        // (как будто мы "возвращаем" товар на склад для возможности редактирования)
         const maxStock = currentStock + item.quantity;
-        
         return {
             productId: item.productId,
             name: item.productName,
@@ -434,43 +427,39 @@ window.editSale = function(saleId) {
             finalPrice: item.price
         };
     });
-
     const allProducts = products.map(p => {
-        // Для товаров, которые уже в корзине этой продажи, увеличиваем доступный остаток
         const itemInSale = sale.items.find(i => i.productId === p.id);
         const availableStock = p.stock + (itemInSale ? itemInSale.quantity : 0);
         return `<option value="${p.id}">${p.name} (${p.size || '—'}) — Остаток: ${availableStock}</option>`;
     }).join('');
-
-    // Конвертируем ISO дату в datetime-local формат
     const saleDate = new Date(sale.date);
     const offset = saleDate.getTimezoneOffset();
     const localDate = new Date(saleDate.getTime() - offset * 60000);
     const dateValue = localDate.toISOString().slice(0, 16);
-
+    const excludeChecked = sale.excludeFromStats ? 'checked' : '';
     const content = `
         <label>Дата и время продажи</label>
         <input type="datetime-local" id="sale-date" value="${dateValue}">
-        
         <label>Продавец</label>
         <input type="text" id="sale-seller" value="${sale.seller || ''}">
-        
         <div class="divider">Товары</div>
-        
         <label>Добавить товар в продажу</label>
         <select id="sale-product-select">
             <option value="">-- Выберите товар --</option>
             ${allProducts}
         </select>
         <button class="btn-small" style="width: 100%; margin-bottom: 16px;" onclick="addSaleItem()">+ Добавить в корзину</button>
-
         <label>Корзина</label>
         <div class="sale-cart" id="sale-cart"></div>
-
         <div class="sale-total">
             Итого: <span id="sale-total-amount">0 ₽</span>
         </div>
-
+        <div style="margin-top: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 6px;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 0;">
+                <input type="checkbox" id="sale-exclude-stats" ${excludeChecked} style="width: auto; margin: 0;">
+                <span style="font-size: 12px; color: var(--text-secondary);">Убрать продажу из статистики</span>
+            </label>
+        </div>
         <button class="btn-primary" onclick="updateSale('${saleId}', this)">Сохранить изменения</button>
     `;
     openModal('Редактировать продажу', content);
@@ -621,9 +610,9 @@ window.saveSale = async function(btn) {
         showError('Добавьте хотя бы один товар в корзину');
         return;
     }
-
     const dateInput = document.getElementById('sale-date').value;
     const sellerInput = document.getElementById('sale-seller').value.trim();
+    const excludeFromStats = document.getElementById('sale-exclude-stats')?.checked || false;
     
     if (!dateInput) {
         showError('Укажите дату продажи');
@@ -633,12 +622,9 @@ window.saveSale = async function(btn) {
         showError('Укажите продавца');
         return;
     }
-
     const totalAmount = currentSaleItems.reduce((sum, item) => sum + item.finalPrice * item.quantity, 0);
-
     btn.disabled = true;
     btn.textContent = 'Сохранение...';
-
     try {
         await window.firebaseFunctions.addDoc(
             window.firebaseFunctions.collection(window.firebaseDb, 'sales'),
@@ -653,10 +639,10 @@ window.saveSale = async function(btn) {
                 })),
                 totalAmount: totalAmount,
                 seller: sellerInput,
-                date: new Date(dateInput).toISOString()
+                date: new Date(dateInput).toISOString(),
+                excludeFromStats: excludeFromStats
             }
         );
-
         for (const item of currentSaleItems) {
             const product = products.find(p => p.id === item.productId);
             if (product) {
@@ -667,7 +653,6 @@ window.saveSale = async function(btn) {
                 );
             }
         }
-
         closeModal();
         currentSaleItems = [];
         editingSaleId = null;
@@ -690,6 +675,7 @@ window.updateSale = async function(saleId, btn) {
 
     const dateInput = document.getElementById('sale-date').value;
     const sellerInput = document.getElementById('sale-seller').value.trim();
+    const excludeFromStats = document.getElementById('sale-exclude-stats')?.checked || false;
     
     if (!dateInput) {
         showError('Укажите дату продажи');
@@ -699,29 +685,23 @@ window.updateSale = async function(saleId, btn) {
         showError('Укажите продавца');
         return;
     }
-
     const oldSale = sales.find(s => s.id === saleId);
     if (!oldSale) return;
-
     const totalAmount = currentSaleItems.reduce((sum, item) => sum + item.finalPrice * item.quantity, 0);
-
     btn.disabled = true;
     btn.textContent = 'Сохранение...';
-
     try {
-        // Откатываем старые остатки
+        // Откатываем старые остатки (ОБНОВЛЯЕМ И В ПАМЯТИ!)
         for (const oldItem of oldSale.items) {
             const product = products.find(p => p.id === oldItem.productId);
             if (product) {
-                const newStock = product.stock + oldItem.quantity;
+                product.stock += oldItem.quantity; // Обновляем в памяти
                 await window.firebaseFunctions.updateDoc(
                     window.firebaseFunctions.doc(window.firebaseDb, 'products', oldItem.productId),
-                    { stock: newStock }
+                    { stock: product.stock }
                 );
             }
         }
-
-        // Обновляем продажу
         await window.firebaseFunctions.updateDoc(
             window.firebaseFunctions.doc(window.firebaseDb, 'sales', saleId),
             {
@@ -735,22 +715,21 @@ window.updateSale = async function(saleId, btn) {
                 })),
                 totalAmount: totalAmount,
                 seller: sellerInput,
-                date: new Date(dateInput).toISOString()
+                date: new Date(dateInput).toISOString(),
+                excludeFromStats: excludeFromStats
             }
         );
-
-        // Применяем новые остатки
+        // Применяем новые остатки (теперь product.stock уже обновлён)
         for (const item of currentSaleItems) {
             const product = products.find(p => p.id === item.productId);
             if (product) {
-                const newStock = product.stock - item.quantity;
+                product.stock -= item.quantity; // Используем обновлённое значение
                 await window.firebaseFunctions.updateDoc(
                     window.firebaseFunctions.doc(window.firebaseDb, 'products', item.productId),
-                    { stock: newStock }
+                    { stock: product.stock }
                 );
             }
         }
-
         closeModal();
         currentSaleItems = [];
         editingSaleId = null;

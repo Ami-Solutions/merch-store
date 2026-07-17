@@ -202,11 +202,11 @@ function renderPlanCard(plan, fact, percent) {
     `;
 }
 
+// Планы продаж используют ВСЕ продажи (включая excludeFromStats)
 function getSalesForPeriod(startDate, endDate) {
     const start = new Date(startDate);
     const end = new Date(endDate);
     end.setHours(23, 59, 59, 999);
-    
     return sales
         .filter(s => {
             const saleDate = new Date(s.date);
@@ -215,12 +215,12 @@ function getSalesForPeriod(startDate, endDate) {
         .reduce((sum, s) => sum + s.totalAmount, 0);
 }
 
-function getSalesArrayForPeriod(startDate, endDate) {
+function getSalesArrayForPeriod(startDate, endDate, salesArray = null) {
     const start = new Date(startDate);
     const end = new Date(endDate);
     end.setHours(23, 59, 59, 999);
-    
-    return sales.filter(s => {
+    const sourceSales = salesArray || sales;
+    return sourceSales.filter(s => {
         const saleDate = new Date(s.date);
         return saleDate >= start && saleDate <= end;
     });
@@ -242,24 +242,24 @@ function getDateRange(periodType, customStart, customEnd) {
 }
 
 function updateDashboard() {
+    // Фильтруем продажи для статистики (исключаем excludeFromStats)
+    const statsSales = sales.filter(s => !s.excludeFromStats);
+    
     // Продажи за выбранный период
     const salesRange = getDateRange(currentSalesPeriod, salesCustomStart, salesCustomEnd);
-    const periodSalesData = getSalesArrayForPeriod(salesRange.start, salesRange.end);
+    const periodSalesData = getSalesArrayForPeriod(salesRange.start, salesRange.end, statsSales);
     const periodSalesTotal = periodSalesData.reduce((sum, s) => sum + s.totalAmount, 0);
     const periodSalesCount = periodSalesData.length;
     const maxSale = periodSalesData.length > 0 ? Math.max(...periodSalesData.map(s => s.totalAmount)) : 0;
-
     document.getElementById('period-sales').textContent = formatCurrency(periodSalesTotal);
     document.getElementById('period-sales-count').textContent = periodSalesCount;
     document.getElementById('period-max-sale').textContent = formatCurrency(maxSale);
-
     // Средний чек за выбранный период
     const avgRange = getDateRange(currentAvgPeriod, avgCustomStart, avgCustomEnd);
-    const avgSalesData = getSalesArrayForPeriod(avgRange.start, avgRange.end);
+    const avgSalesData = getSalesArrayForPeriod(avgRange.start, avgRange.end, statsSales);
     const avgTotal = avgSalesData.reduce((sum, s) => sum + s.totalAmount, 0);
     const avgCount = avgSalesData.length;
     const avgCheck = avgCount > 0 ? avgTotal / avgCount : 0;
-    
     // Медиана
     let medianCheck = 0;
     if (avgCount > 0) {
@@ -268,27 +268,22 @@ function updateDashboard() {
         medianCheck = sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
     }
     const minCheck = avgCount > 0 ? Math.min(...avgSalesData.map(s => s.totalAmount)) : 0;
-
     document.getElementById('period-avg').textContent = formatCurrency(avgCheck);
     document.getElementById('period-median').textContent = formatCurrency(medianCheck);
     document.getElementById('period-min-check').textContent = formatCurrency(minCheck);
-
     // Склад
     const totalStock = products.reduce((sum, p) => sum + (p.stock || 0), 0);
     document.getElementById('total-stock').textContent = totalStock;
-
     if (income.length > 0) {
-        const lastIncome = income.reduce((latest, current) => 
+        const lastIncome = income.reduce((latest, current) =>
             new Date(current.date) > new Date(latest.date) ? current : latest
         );
-        document.getElementById('last-income').textContent = 
+        document.getElementById('last-income').textContent =
             formatDate(lastIncome.date) + ' — ' + lastIncome.productName;
     } else {
         document.getElementById('last-income').textContent = 'Нет поступлений';
     }
-
     renderPlansOverview();
-    
     setTimeout(() => {
         renderSalesChart();
         renderTopProductsChart();
@@ -299,26 +294,25 @@ function updateDashboard() {
 function renderSalesChart() {
     const ctx = document.getElementById('sales-chart');
     if (!ctx) return;
-    
     if (salesChart) salesChart.destroy();
-
+    
+    // Фильтруем для графика
+    const statsSales = sales.filter(s => !s.excludeFromStats);
+    
     const period = currentSalesChartPeriod;
     const days = [];
     const salesData = [];
-
     let startInput, endInput;
     if (period === 'custom') {
         startInput = salesChartCustomStart;
         endInput = salesChartCustomEnd;
     }
-
     if (period === 'custom' && (!startInput || !endInput)) {
         days.push('Выберите период');
         salesData.push(0);
     } else {
         const now = new Date();
         let startDate, endDate;
-        
         if (period === 'custom') {
             startDate = new Date(startInput);
             endDate = new Date(endInput);
@@ -327,26 +321,20 @@ function renderSalesChart() {
             endDate = now;
             startDate = new Date(now.getTime() - (numDays - 1) * 24 * 60 * 60 * 1000);
         }
-
         const diffDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
         const maxPoints = 60;
         const step = diffDays > maxPoints ? Math.ceil(diffDays / maxPoints) : 1;
-
         for (let i = 0; i < diffDays; i += step) {
             const date = new Date(startDate);
             date.setDate(date.getDate() + i);
             const dateStr = date.toISOString().split('T')[0];
-            
             days.push(date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }));
-            
-            const daySales = sales
+            const daySales = statsSales
                 .filter(s => s.date.split('T')[0] === dateStr)
                 .reduce((sum, s) => sum + s.totalAmount, 0);
-            
             salesData.push(daySales);
         }
     }
-
     salesChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -382,13 +370,14 @@ function renderSalesChart() {
 function renderTopProductsChart() {
     const ctx = document.getElementById('top-products-chart');
     if (!ctx) return;
-    
     if (topProductsChart) topProductsChart.destroy();
     
-    const topCount = parseInt(document.getElementById('top-products-filter')?.value || 5);
+    // Фильтруем для топ товаров
+    const statsSales = sales.filter(s => !s.excludeFromStats);
     
+    const topCount = parseInt(document.getElementById('top-products-filter')?.value || 5);
     const productSales = {};
-    sales.forEach(sale => {
+    statsSales.forEach(sale => {
         if (sale.items) {
             sale.items.forEach(item => {
                 if (!productSales[item.productName]) {
@@ -398,11 +387,9 @@ function renderTopProductsChart() {
             });
         }
     });
-
     const topProducts = Object.entries(productSales)
         .sort((a, b) => b[1] - a[1])
         .slice(0, topCount);
-
     topProductsChart = new Chart(ctx, {
         type: 'bar',
         data: {
