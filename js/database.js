@@ -365,56 +365,76 @@ async function loadSales() {
     updateSalesFilters();
 }
 
-// Обновлённые модальные окна с незаметной кнопкой
 document.getElementById('add-sale-btn').addEventListener('click', () => {
     editingSaleId = null;
+    
     if (products.length === 0) {
         showError('Сначала добавьте товары');
         return;
     }
+    
     currentSaleItems = [];
-    const options = products
-        .filter(p => p.stock > 0)
-        .map(p => `<option value="${p.id}">${p.name} (${p.size || '—'}) — Остаток: ${p.stock}</option>`)
-        .join('');
+    
+    // Datalist для продавцов
+    const sellers = [...new Set(sales.map(s => s.seller).filter(s => s))];
+    const sellerDatalist = `
+        <datalist id="sale-seller-list">
+            ${sellers.map(s => `<option value="${s}">`).join('')}
+        </datalist>
+    `;
+    
     const content = `
+        ${sellerDatalist}
         <label>Дата и время продажи</label>
         <input type="datetime-local" id="sale-date" value="${getCurrentDateTimeLocal()}">
+        
         <label>Продавец</label>
-        <input type="text" id="sale-seller" value="${window.currentUser.name || ''}">
+        <input type="text" id="sale-seller" list="sale-seller-list" value="${window.currentUser.name || ''}" placeholder="Выберите или введите">
+        
         <div class="divider">Товары</div>
-        <label>Добавить товар в продажу</label>
-        <select id="sale-product-select">
-            <option value="">-- Выберите товар --</option>
-            ${options}
-        </select>
+        
+        <label>Найти и добавить товар</label>
+        <div class="ac-wrapper">
+            <input type="text" id="sale-product-search" class="ac-input" placeholder="Начните вводить название..." autocomplete="off">
+            <input type="hidden" id="sale-product-id">
+            <div id="sale-product-dropdown" class="product-dropdown"></div>
+        </div>
         <button class="btn-small" style="width: 100%; margin-bottom: 16px;" onclick="addSaleItem()">+ Добавить в корзину</button>
+        
         <label>Корзина</label>
         <div class="sale-cart" id="sale-cart">
             <div class="sale-cart-empty">Добавьте товары в продажу</div>
         </div>
+        
         <div class="sale-total">
             Итого: <span id="sale-total-amount">0 ₽</span>
         </div>
+        
         <div style="margin-top: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 6px;">
             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 0;">
                 <input type="checkbox" id="sale-exclude-stats" style="width: auto; margin: 0;">
                 <span style="font-size: 12px; color: var(--text-secondary);">Убрать продажу из статистики</span>
             </label>
         </div>
+        
         <button class="btn-primary" onclick="saveSale(this)">Оформить продажу</button>
     `;
     openModal('Добавить продажу', content);
+    
+    // Инициализируем поиск товаров
+    initProductSearch('sale-product-search', 'sale-product-id', 'sale-product-dropdown');
 });
 
 window.editSale = function(saleId) {
     const sale = sales.find(s => s.id === saleId);
     if (!sale || !sale.items) return;
+
     editingSaleId = saleId;
     currentSaleItems = sale.items.map(item => {
         const product = products.find(p => p.id === item.productId);
         const currentStock = product ? product.stock : 0;
         const maxStock = currentStock + item.quantity;
+        
         return {
             productId: item.productId,
             name: item.productName,
@@ -427,55 +447,78 @@ window.editSale = function(saleId) {
             finalPrice: item.price
         };
     });
-    const allProducts = products.map(p => {
-        const itemInSale = sale.items.find(i => i.productId === p.id);
-        const availableStock = p.stock + (itemInSale ? itemInSale.quantity : 0);
-        return `<option value="${p.id}">${p.name} (${p.size || '—'}) — Остаток: ${availableStock}</option>`;
-    }).join('');
+
+    // Datalist для продавцов
+    const sellers = [...new Set(sales.map(s => s.seller).filter(s => s))];
+    const sellerDatalist = `
+        <datalist id="sale-seller-list">
+            ${sellers.map(s => `<option value="${s}">`).join('')}
+        </datalist>
+    `;
+
     const saleDate = new Date(sale.date);
     const offset = saleDate.getTimezoneOffset();
     const localDate = new Date(saleDate.getTime() - offset * 60000);
     const dateValue = localDate.toISOString().slice(0, 16);
+    
     const excludeChecked = sale.excludeFromStats ? 'checked' : '';
+
     const content = `
+        ${sellerDatalist}
         <label>Дата и время продажи</label>
         <input type="datetime-local" id="sale-date" value="${dateValue}">
+        
         <label>Продавец</label>
-        <input type="text" id="sale-seller" value="${sale.seller || ''}">
+        <input type="text" id="sale-seller" list="sale-seller-list" value="${sale.seller || ''}" placeholder="Выберите или введите">
+        
         <div class="divider">Товары</div>
-        <label>Добавить товар в продажу</label>
-        <select id="sale-product-select">
-            <option value="">-- Выберите товар --</option>
-            ${allProducts}
-        </select>
+        
+        <label>Найти и добавить товар</label>
+        <div class="ac-wrapper">
+            <input type="text" id="sale-product-search" class="ac-input" placeholder="Начните вводить название..." autocomplete="off">
+            <input type="hidden" id="sale-product-id">
+            <div id="sale-product-dropdown" class="product-dropdown"></div>
+        </div>
         <button class="btn-small" style="width: 100%; margin-bottom: 16px;" onclick="addSaleItem()">+ Добавить в корзину</button>
+        
         <label>Корзина</label>
         <div class="sale-cart" id="sale-cart"></div>
+        
         <div class="sale-total">
             Итого: <span id="sale-total-amount">0 ₽</span>
         </div>
+        
         <div style="margin-top: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 6px;">
             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 0;">
                 <input type="checkbox" id="sale-exclude-stats" ${excludeChecked} style="width: auto; margin: 0;">
                 <span style="font-size: 12px; color: var(--text-secondary);">Убрать продажу из статистики</span>
             </label>
         </div>
+        
         <button class="btn-primary" onclick="updateSale('${saleId}', this)">Сохранить изменения</button>
     `;
     openModal('Редактировать продажу', content);
     renderSaleCart();
+    
+    // Инициализируем поиск товаров
+    initProductSearch('sale-product-search', 'sale-product-id', 'sale-product-dropdown');
 };
 
 window.addSaleItem = function() {
-    const select = document.getElementById('sale-product-select');
-    const productId = select.value;
+    const hiddenInput = document.getElementById('sale-product-id');
+    const searchInput = document.getElementById('sale-product-search');
+    const productId = hiddenInput ? hiddenInput.value : '';
+    
     if (!productId) {
-        showError('Выберите товар');
+        showError('Выберите товар из списка');
         return;
     }
 
     const product = products.find(p => p.id === productId);
-    if (!product) return;
+    if (!product) {
+        showError('Товар не найден');
+        return;
+    }
 
     const existing = currentSaleItems.find(i => i.productId === productId);
     if (existing) {
@@ -505,6 +548,10 @@ window.addSaleItem = function() {
         customPrice: product.price || 0,
         finalPrice: product.price || 0
     });
+
+    // Очищаем поле поиска после добавления
+    if (searchInput) searchInput.value = '';
+    if (hiddenInput) hiddenInput.value = '';
 
     renderSaleCart();
 };
@@ -610,6 +657,7 @@ window.saveSale = async function(btn) {
         showError('Добавьте хотя бы один товар в корзину');
         return;
     }
+
     const dateInput = document.getElementById('sale-date').value;
     const sellerInput = document.getElementById('sale-seller').value.trim();
     const excludeFromStats = document.getElementById('sale-exclude-stats')?.checked || false;
@@ -622,9 +670,12 @@ window.saveSale = async function(btn) {
         showError('Укажите продавца');
         return;
     }
+
     const totalAmount = currentSaleItems.reduce((sum, item) => sum + item.finalPrice * item.quantity, 0);
+
     btn.disabled = true;
     btn.textContent = 'Сохранение...';
+
     try {
         await window.firebaseFunctions.addDoc(
             window.firebaseFunctions.collection(window.firebaseDb, 'sales'),
@@ -643,6 +694,7 @@ window.saveSale = async function(btn) {
                 excludeFromStats: excludeFromStats
             }
         );
+
         for (const item of currentSaleItems) {
             const product = products.find(p => p.id === item.productId);
             if (product) {
@@ -653,6 +705,7 @@ window.saveSale = async function(btn) {
                 );
             }
         }
+
         closeModal();
         currentSaleItems = [];
         editingSaleId = null;
@@ -685,23 +738,29 @@ window.updateSale = async function(saleId, btn) {
         showError('Укажите продавца');
         return;
     }
+
     const oldSale = sales.find(s => s.id === saleId);
     if (!oldSale) return;
+
     const totalAmount = currentSaleItems.reduce((sum, item) => sum + item.finalPrice * item.quantity, 0);
+
     btn.disabled = true;
     btn.textContent = 'Сохранение...';
+
     try {
         // Откатываем старые остатки (ОБНОВЛЯЕМ И В ПАМЯТИ!)
         for (const oldItem of oldSale.items) {
             const product = products.find(p => p.id === oldItem.productId);
             if (product) {
-                product.stock += oldItem.quantity; // Обновляем в памяти
+                product.stock += oldItem.quantity;
                 await window.firebaseFunctions.updateDoc(
                     window.firebaseFunctions.doc(window.firebaseDb, 'products', oldItem.productId),
                     { stock: product.stock }
                 );
             }
         }
+
+        // Обновляем продажу
         await window.firebaseFunctions.updateDoc(
             window.firebaseFunctions.doc(window.firebaseDb, 'sales', saleId),
             {
@@ -719,17 +778,19 @@ window.updateSale = async function(saleId, btn) {
                 excludeFromStats: excludeFromStats
             }
         );
-        // Применяем новые остатки (теперь product.stock уже обновлён)
+
+        // Применяем новые остатки
         for (const item of currentSaleItems) {
             const product = products.find(p => p.id === item.productId);
             if (product) {
-                product.stock -= item.quantity; // Используем обновлённое значение
+                product.stock -= item.quantity;
                 await window.firebaseFunctions.updateDoc(
                     window.firebaseFunctions.doc(window.firebaseDb, 'products', item.productId),
                     { stock: product.stock }
                 );
             }
         }
+
         closeModal();
         currentSaleItems = [];
         editingSaleId = null;
@@ -798,25 +859,27 @@ async function loadIncome() {
 document.getElementById('add-income-btn').addEventListener('click', () => {
     editingIncomeId = null;
     
-    let options = '';
-    if (products.length > 0) {
-        options = products.map(p => `<option value="${p.id}">${p.name} (${p.size || '—'})</option>`).join('');
-    }
-
+    // Создаём datalist для продавцов
+    const sellers = [...new Set(sales.map(s => s.seller).filter(s => s))];
+    const sellerDatalist = `
+        <datalist id="seller-list">
+            ${sellers.map(s => `<option value="${s}">`).join('')}
+        </datalist>
+    `;
+    
     const datalists = generateDatalistHTML();
 
     const content = `
+        ${sellerDatalist}
         <label>Дата и время поступления</label>
         <input type="datetime-local" id="income-date" value="${getCurrentDateTimeLocal()}">
         
         <label>Товар</label>
-        <select id="income-product" required>
-            <option value="">-- Выберите товар --</option>
-            ${options}
-            <option value="new">➕ Добавить новый товар</option>
-        </select>
+        <input type="text" id="income-product-search" placeholder="Начните вводить название..." autocomplete="off">
+        <input type="hidden" id="income-product-id">
+        <div id="income-product-dropdown" class="product-dropdown"></div>
         
-        <div id="income-quantity-wrapper">
+        <div id="income-quantity-wrapper" style="display: none;">
             <label>Количество</label>
             <input type="number" id="income-quantity" min="1" value="1" required>
         </div>
@@ -851,50 +914,55 @@ document.getElementById('add-income-btn').addEventListener('click', () => {
     `;
     openModal('Добавить поступление', content);
     
-    setTimeout(() => {
-        const select = document.getElementById('income-product');
-        select.addEventListener('change', function() {
-            const newProductForm = document.getElementById('new-product-form');
-            const quantityWrapper = document.getElementById('income-quantity-wrapper');
-            
-            if (this.value === 'new') {
-                newProductForm.style.display = 'block';
-                quantityWrapper.style.display = 'block';
-            } else if (this.value === '') {
-                newProductForm.style.display = 'none';
-                quantityWrapper.style.display = 'none';
-            } else {
-                newProductForm.style.display = 'none';
-                quantityWrapper.style.display = 'block';
-            }
-        });
-    }, 100);
+    // Инициализируем поиск товаров
+    initProductSearch('income-product-search', 'income-product-id', 'income-product-dropdown', (productId) => {
+        const quantityWrapper = document.getElementById('income-quantity-wrapper');
+        const newProductForm = document.getElementById('new-product-form');
+        
+        if (productId === 'new') {
+            quantityWrapper.style.display = 'block';
+            newProductForm.style.display = 'block';
+        } else if (productId) {
+            quantityWrapper.style.display = 'block';
+            newProductForm.style.display = 'none';
+        } else {
+            quantityWrapper.style.display = 'none';
+            newProductForm.style.display = 'none';
+        }
+    });
 });
 
 window.editIncome = async function(incomeId) {
     const incomeRecord = income.find(i => i.id === incomeId);
     if (!incomeRecord) return;
-
+    
     editingIncomeId = incomeId;
+    
+    const product = products.find(p => p.id === incomeRecord.productId);
+    const productName = product ? `${product.name} (${product.size || '—'})` : incomeRecord.productName;
+    
+    // Создаём datalist для продавцов
+    const sellers = [...new Set(sales.map(s => s.seller).filter(s => s))];
+    const sellerDatalist = `
+        <datalist id="seller-list">
+            ${sellers.map(s => `<option value="${s}">`).join('')}
+        </datalist>
+    `;
 
-    const options = products.map(p => 
-        `<option value="${p.id}" ${p.id === incomeRecord.productId ? 'selected' : ''}>${p.name} (${p.size || '—'})</option>`
-    ).join('');
-
-    // Конвертируем ISO дату в datetime-local формат
     const incomeDate = new Date(incomeRecord.date);
     const offset = incomeDate.getTimezoneOffset();
     const localDate = new Date(incomeDate.getTime() - offset * 60000);
     const dateValue = localDate.toISOString().slice(0, 16);
 
     const content = `
+        ${sellerDatalist}
         <label>Дата и время поступления</label>
         <input type="datetime-local" id="income-date" value="${dateValue}">
         
         <label>Товар</label>
-        <select id="income-product" required>
-            ${options}
-        </select>
+        <input type="text" id="income-product-search" value="${productName}" autocomplete="off">
+        <input type="hidden" id="income-product-id" value="${incomeRecord.productId}">
+        <div id="income-product-dropdown" class="product-dropdown"></div>
         
         <div id="income-quantity-wrapper">
             <label>Количество</label>
@@ -904,6 +972,9 @@ window.editIncome = async function(incomeId) {
         <button class="btn-primary" onclick="updateIncome('${incomeId}', this)">Сохранить изменения</button>
     `;
     openModal('Редактировать поступление', content);
+    
+    // Инициализируем поиск товаров
+    initProductSearch('income-product-search', 'income-product-id', 'income-product-dropdown');
 };
 
 window.saveIncome = async function(btn) {
@@ -914,8 +985,8 @@ window.saveIncome = async function(btn) {
         return;
     }
 
-    const productSelect = document.getElementById('income-product');
-    let productId = productSelect.value;
+    const hiddenInput = document.getElementById('income-product-id');
+    let productId = hiddenInput ? hiddenInput.value : '';
     const quantity = parseInt(document.getElementById('income-quantity').value);
     
     if (productId === 'new') {
@@ -1030,7 +1101,8 @@ window.updateIncome = async function(incomeId, btn) {
         return;
     }
 
-    const productId = document.getElementById('income-product').value;
+    const hiddenInput = document.getElementById('income-product-id');
+    const productId = hiddenInput ? hiddenInput.value : '';
     const quantity = parseInt(document.getElementById('income-quantity').value);
     
     const oldIncome = income.find(i => i.id === incomeId);
@@ -1644,3 +1716,83 @@ window.resetPlanFilters = function() {
     document.getElementById('plan-date-to').value = '';
     renderPlans();
 };
+
+// === ПОИСК ТОВАРОВ С АВТОДОПОЛНЕНИЕМ ===
+function initProductSearch(searchInputId, hiddenInputId, dropdownId, onSelectCallback) {
+    const searchInput = document.getElementById(searchInputId);
+    const hiddenInput = document.getElementById(hiddenInputId);
+    const dropdown = document.getElementById(dropdownId);
+    
+    if (!searchInput || !hiddenInput || !dropdown) return;
+    
+    searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.trim().toLowerCase();
+        hiddenInput.value = '';
+        
+        if (onSelectCallback) onSelectCallback('');
+        
+        if (query.length < 2) {
+            dropdown.innerHTML = '';
+            dropdown.style.display = 'none';
+            return;
+        }
+        
+        // Фильтруем товары
+        const filtered = products.filter(p => {
+            const name = (p.name || '').toLowerCase();
+            const brand = (p.brand || '').toLowerCase();
+            const category = (p.category || '').toLowerCase();
+            return name.includes(query) || brand.includes(query) || category.includes(query);
+        }).slice(0, 10); // Показываем максимум 10 результатов
+        
+        if (filtered.length === 0) {
+            dropdown.innerHTML = '<div class="dropdown-item no-results">Ничего не найдено</div>';
+            dropdown.style.display = 'block';
+            return;
+        }
+        
+        dropdown.innerHTML = filtered.map(p => {
+            const stockClass = p.stock > 0 ? 'in-stock' : 'out-of-stock';
+            const stockText = p.stock > 0 ? `Остаток: ${p.stock}` : 'Нет в наличии';
+            return `
+                <div class="dropdown-item" data-product-id="${p.id}">
+                    <div class="product-name">${p.name} ${p.size ? `(${p.size})` : ''}</div>
+                    <div class="product-meta">
+                        <span class="${stockClass}">${stockText}</span>
+                        ${p.brand ? `<span class="product-brand">${p.brand}</span>` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        dropdown.style.display = 'block';
+        
+        // Добавляем обработчики клика на варианты
+        dropdown.querySelectorAll('.dropdown-item[data-product-id]').forEach(item => {
+            item.addEventListener('click', () => {
+                const productId = item.dataset.productId;
+                const product = products.find(p => p.id === productId);
+                if (product) {
+                    searchInput.value = `${product.name} ${product.size ? `(${product.size})` : ''}`;
+                    hiddenInput.value = productId;
+                    dropdown.style.display = 'none';
+                    if (onSelectCallback) onSelectCallback(productId);
+                }
+            });
+        });
+    });
+    
+    // Скрываем dropdown при клике вне
+    document.addEventListener('click', (e) => {
+        if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+    
+    // Фокус на input показывает dropdown если есть значение
+    searchInput.addEventListener('focus', () => {
+        if (searchInput.value.trim().length >= 2) {
+            searchInput.dispatchEvent(new Event('input'));
+        }
+    });
+}
