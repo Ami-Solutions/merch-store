@@ -23,7 +23,20 @@ function getGenderLabel(gender) {
     return labels[gender] || '—';
 }
 
-// === Получить факт продаж с учётом продавца плана ===
+// === Расчёт чистой прибыли для массива продаж ===
+function calcProfitFromSales(salesArray) {
+    return salesArray.reduce((totalProfit, s) => {
+        if (!s.items) return totalProfit;
+        const saleProfit = s.items.reduce((profit, item) => {
+            const product = products.find(p => p.id === item.productId);
+            const cost = product ? (product.cost || 0) : 0;
+            return profit + ((item.price - cost) * item.quantity);
+        }, 0);
+        return totalProfit + saleProfit;
+    }, 0);
+}
+
+// === Получить факт продаж для плана (ВСЕ продажи, включая excludeFromStats) ===
 function getFactForPlan(plan) {
     const start = new Date(plan.startDate);
     const end = new Date(plan.endDate);
@@ -33,11 +46,27 @@ function getFactForPlan(plan) {
         .filter(s => {
             const saleDate = new Date(s.date);
             if (saleDate < start || saleDate > end) return false;
-            // Если план привязан к конкретному продавцу — фильтруем
             if (plan.assignedSeller && s.seller !== plan.assignedSeller) return false;
             return true;
         })
         .reduce((sum, s) => sum + s.totalAmount, 0);
+}
+
+// === Получить прибыль для плана (исключая excludeFromStats) ===
+function getProfitForPlan(plan) {
+    const start = new Date(plan.startDate);
+    const end = new Date(plan.endDate);
+    end.setHours(23, 59, 59, 999);
+    
+    const relevantSales = sales.filter(s => {
+        const saleDate = new Date(s.date);
+        if (saleDate < start || saleDate > end) return false;
+        if (s.excludeFromStats) return false;
+        if (plan.assignedSeller && s.seller !== plan.assignedSeller) return false;
+        return true;
+    });
+    
+    return calcProfitFromSales(relevantSales);
 }
 
 function renderProducts() {
@@ -74,12 +103,14 @@ function renderSales() {
         const itemsHtml = sale.items ? sale.items.map(item => 
             `<div>• ${item.productName} × ${item.quantity} = ${formatCurrency(item.total)}</div>`
         ).join('') : '<div>—</div>';
+        
+        const excludeIcon = sale.excludeFromStats ? ' <span style="color: var(--text-secondary); font-size: 11px;" title="Исключена из статистики">📊✕</span>' : '';
 
         return `
             <tr>
                 <td>${formatDate(sale.date)}</td>
                 <td class="sale-items-cell">${itemsHtml}</td>
-                <td><strong>${formatCurrency(sale.totalAmount)}</strong></td>
+                <td><strong>${formatCurrency(sale.totalAmount)}</strong>${excludeIcon}</td>
                 <td>${sale.seller}</td>
                 <td>
                     <button class="action-btn edit" onclick="editSale('${sale.id}')">Изменить</button>
@@ -114,8 +145,10 @@ function renderPlans() {
     
     tbody.innerHTML = filtered.map(plan => {
         const fact = getFactForPlan(plan);
+        const profit = getProfitForPlan(plan);
         const percent = plan.targetAmount > 0 ? (fact / plan.targetAmount * 100).toFixed(1) : 0;
         const sellerLabel = plan.assignedSeller || 'Общий';
+        const profitColor = profit >= 0 ? 'var(--success)' : 'var(--danger)';
         
         return `
             <tr>
@@ -126,6 +159,7 @@ function renderPlans() {
                 <td>${sellerLabel}</td>
                 <td>${formatCurrency(plan.targetAmount)}</td>
                 <td>${formatCurrency(fact)}</td>
+                <td style="color: ${profitColor}; font-weight: 600;">${formatCurrency(profit)}</td>
                 <td>
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <div style="flex: 1; height: 8px; background: var(--bg-tertiary); border-radius: 4px; overflow: hidden; min-width: 80px;">
@@ -151,7 +185,6 @@ function renderPlansOverview() {
 
     const now = new Date();
     
-    // Фильтруем только актуальные (текущие) планы
     const currentPlans = plans.filter(p => {
         const start = new Date(p.startDate);
         const end = new Date(p.endDate);
@@ -167,15 +200,17 @@ function renderPlansOverview() {
     let html = '';
     currentPlans.forEach(plan => {
         const fact = getFactForPlan(plan);
+        const profit = getProfitForPlan(plan);
         const percent = plan.targetAmount > 0 ? (fact / plan.targetAmount * 100).toFixed(1) : 0;
-        html += renderPlanCard(plan, fact, percent);
+        html += renderPlanCard(plan, fact, profit, percent);
     });
 
     container.innerHTML = html;
 }
 
-function renderPlanCard(plan, fact, percent) {
+function renderPlanCard(plan, fact, profit, percent) {
     const sellerLabel = plan.assignedSeller ? `Продавец: ${plan.assignedSeller}` : 'Общий план';
+    const profitColor = profit >= 0 ? 'var(--success)' : 'var(--danger)';
     
     return `
         <div class="plan-card">
@@ -198,11 +233,14 @@ function renderPlanCard(plan, fact, percent) {
                 <div>Факт: <strong>${formatCurrency(fact)}</strong></div>
                 <div><strong>${percent}%</strong></div>
             </div>
+            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 13px; color: var(--text-secondary); display: flex; justify-content: space-between;">
+                <span>Чистая прибыль:</span>
+                <strong style="color: ${profitColor}; font-size: 15px;">${formatCurrency(profit)}</strong>
+            </div>
         </div>
     `;
 }
 
-// Планы продаж используют ВСЕ продажи (включая excludeFromStats)
 function getSalesForPeriod(startDate, endDate) {
     const start = new Date(startDate);
     const end = new Date(endDate);
@@ -253,6 +291,14 @@ function updateDashboard() {
     const periodSalesTotal = periodSalesData.reduce((sum, s) => sum + s.totalAmount, 0);
     const periodSalesCount = periodSalesData.length;
     const maxSale = periodSalesData.length > 0 ? Math.max(...periodSalesData.map(s => s.totalAmount)) : 0;
+    
+    // Чистая прибыль за период
+    const periodProfit = calcProfitFromSales(periodSalesData);
+    const profitEl = document.getElementById('period-profit');
+    if (profitEl) {
+        profitEl.textContent = formatCurrency(periodProfit);
+        profitEl.style.color = periodProfit >= 0 ? 'var(--success)' : 'var(--danger)';
+    }
 
     document.getElementById('period-sales').textContent = formatCurrency(periodSalesTotal);
     document.getElementById('period-sales-count').textContent = periodSalesCount;
@@ -307,7 +353,6 @@ function renderSalesChart() {
     
     if (salesChart) salesChart.destroy();
 
-    // Фильтруем для графика
     const statsSales = sales.filter(s => !s.excludeFromStats);
 
     const period = currentSalesChartPeriod;
@@ -393,7 +438,6 @@ function renderTopProductsChart() {
     
     if (topProductsChart) topProductsChart.destroy();
     
-    // Фильтруем для топ товаров
     const statsSales = sales.filter(s => !s.excludeFromStats);
     
     const topCount = parseInt(document.getElementById('top-products-filter')?.value || 5);
