@@ -74,6 +74,29 @@ function generateDatalistHTML() {
     `;
 }
 
+// === МАППИНГ БРЕНДОВ (постоянные поставщики) ===
+function getBrandMapping() {
+    const stored = localStorage.getItem('brandMapping');
+    return stored ? JSON.parse(stored) : {};
+}
+
+function saveBrandMapping(mapping) {
+    localStorage.setItem('brandMapping', JSON.stringify(mapping));
+}
+
+function updateBrandMapping(brand, isPermanent) {
+    if (!brand || !brand.trim()) return;
+    const mapping = getBrandMapping();
+    mapping[brand.trim()] = isPermanent;
+    saveBrandMapping(mapping);
+}
+
+function isBrandPermanent(brand) {
+    if (!brand || !brand.trim()) return false;
+    const mapping = getBrandMapping();
+    return mapping[brand.trim()] || false;
+}
+
 // === ЗАГРУЗКА ПОЛЬЗОВАТЕЛЕЙ (для планов) ===
 async function loadAllUsers() {
     try {
@@ -176,6 +199,13 @@ document.getElementById('add-product-btn').addEventListener('click', () => {
         <label>Бренд</label>
         <input type="text" id="product-brand" list="brand-list" placeholder="Выберите или введите новое">
         
+        <div id="permanent-supplier-wrapper" style="margin-top: 8px; margin-bottom: 16px; opacity: 0.5;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: not-allowed;">
+                <input type="checkbox" id="product-permanent-supplier" disabled style="width: auto; margin: 0; cursor: not-allowed;">
+                <span>Этот бренд – постоянный поставщик <span class="tooltip-trigger" data-tooltip="permanent-supplier">?</span></span>
+            </label>
+        </div>
+        
         <label>Пол</label>
         <select id="product-gender">
             <option value="">Не указан</option>
@@ -196,20 +226,54 @@ document.getElementById('add-product-btn').addEventListener('click', () => {
         <label>Цена по скидке</label>
         <input type="number" id="product-discount" value="0">
         
-        <label>Остаток</label>
-        <input type="number" id="product-stock" value="0">
+        <div style="margin-top: 16px; padding: 14px 16px; background: var(--bg-tertiary); border-radius: 8px;">
+            <label style="color: var(--text-secondary); font-size: 12px; margin-bottom: 6px; display: block;">Остаток (заполняется через "+ Приход")</label>
+            <input type="number" value="0" readonly style="background: var(--bg-quaternary); cursor: not-allowed; opacity: 0.7;">
+            <p style="font-size: 11px; color: var(--text-secondary); margin-top: 6px; margin-bottom: 0;">После сохранения товара используйте кнопку "+ Приход" в таблице товаров</p>
+        </div>
         
         <button class="btn-primary" onclick="saveProduct(this)">Сохранить</button>
     `;
     openModal('Добавить товар', content);
+    
+    initTooltips();
+    
+    const brandInput = document.getElementById('product-brand');
+    const checkboxWrapper = document.getElementById('permanent-supplier-wrapper');
+    const checkbox = document.getElementById('product-permanent-supplier');
+    const checkboxLabel = checkboxWrapper.querySelector('label');
+    
+    brandInput.addEventListener('input', () => {
+        const brandValue = brandInput.value.trim();
+        if (brandValue) {
+            checkbox.disabled = false;
+            checkbox.style.cursor = 'pointer';
+            checkboxLabel.style.cursor = 'pointer';
+            checkboxWrapper.style.opacity = '1';
+            checkbox.checked = isBrandPermanent(brandValue);
+        } else {
+            checkbox.disabled = true;
+            checkbox.checked = false;
+            checkbox.style.cursor = 'not-allowed';
+            checkboxLabel.style.cursor = 'not-allowed';
+            checkboxWrapper.style.opacity = '0.5';
+        }
+    });
 });
 
 window.editProduct = function(productId) {
     const product = products.find(p => p.id === productId);
     if (!product) return;
-
+    
     const datalists = generateDatalistHTML();
-
+    
+    const brandValue = product.brand || '';
+    const isPermanent = brandValue ? (product.isPermanentSupplier || isBrandPermanent(brandValue)) : false;
+    const checkboxDisabled = !brandValue;
+    const checkboxChecked = isPermanent ? 'checked' : '';
+    const wrapperOpacity = brandValue ? '1' : '0.5';
+    const cursorStyle = brandValue ? 'pointer' : 'not-allowed';
+    
     const content = `
         ${datalists}
         
@@ -220,7 +284,14 @@ window.editProduct = function(productId) {
         <input type="text" id="product-category" list="category-list" value="${product.category || ''}" placeholder="Выберите или введите новое">
         
         <label>Бренд</label>
-        <input type="text" id="product-brand" list="brand-list" value="${product.brand || ''}" placeholder="Выберите или введите новое">
+        <input type="text" id="product-brand" list="brand-list" value="${brandValue}" placeholder="Выберите или введите новое">
+        
+        <div id="permanent-supplier-wrapper" style="margin-top: 8px; margin-bottom: 16px; opacity: ${wrapperOpacity};">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: ${cursorStyle};">
+                <input type="checkbox" id="product-permanent-supplier" ${checkboxChecked} ${checkboxDisabled ? 'disabled' : ''} style="width: auto; margin: 0; cursor: ${cursorStyle};">
+                <span>Этот бренд – постоянный поставщик <span class="tooltip-trigger" data-tooltip="permanent-supplier">?</span></span>
+            </label>
+        </div>
         
         <label>Пол</label>
         <select id="product-gender">
@@ -242,45 +313,76 @@ window.editProduct = function(productId) {
         <label>Цена по скидке</label>
         <input type="number" id="product-discount" value="${product.discount || 0}">
         
-        <label>Остаток</label>
-        <input type="number" id="product-stock" value="${product.stock || 0}">
+        <div style="margin-top: 16px; padding: 14px 16px; background: var(--bg-tertiary); border-radius: 8px;">
+            <label style="color: var(--text-secondary); font-size: 12px; margin-bottom: 6px; display: block;">Остаток (заполняется через "+ Приход")</label>
+            <input type="number" value="${product.stock || 0}" readonly style="background: var(--bg-quaternary); cursor: not-allowed; opacity: 0.7;">
+            <div style="display: flex; gap: 8px; margin-top: 12px;">
+                <button class="btn-small" onclick="showQuickIncome('${productId}')" style="flex: 1;">+ Приход</button>
+                <button class="btn-secondary" onclick="showIncomeHistory('${productId}')" style="flex: 1; padding: 6px 12px; font-size: 13px;">📋 История</button>
+            </div>
+        </div>
         
         <button class="btn-primary" onclick="updateProduct('${productId}', this)">Сохранить изменения</button>
     `;
     openModal('Редактировать товар', content);
+    
+    initTooltips();
+    
+    const brandInput = document.getElementById('product-brand');
+    const checkboxWrapper = document.getElementById('permanent-supplier-wrapper');
+    const checkbox = document.getElementById('product-permanent-supplier');
+    const checkboxLabel = checkboxWrapper.querySelector('label');
+    
+    brandInput.addEventListener('input', () => {
+        const brandValue = brandInput.value.trim();
+        if (brandValue) {
+            checkbox.disabled = false;
+            checkbox.style.cursor = 'pointer';
+            checkboxLabel.style.cursor = 'pointer';
+            checkboxWrapper.style.opacity = '1';
+            checkbox.checked = isBrandPermanent(brandValue);
+        } else {
+            checkbox.disabled = true;
+            checkbox.checked = false;
+            checkbox.style.cursor = 'not-allowed';
+            checkboxLabel.style.cursor = 'not-allowed';
+            checkboxWrapper.style.opacity = '0.5';
+        }
+    });
 };
 
 window.saveProduct = async function(btn) {
     const name = document.getElementById('product-name').value.trim();
-    
     if (!name) {
         showError('Название обязательно');
         return;
     }
-
     const category = document.getElementById('product-category').value.trim();
     const brand = document.getElementById('product-brand').value.trim();
+    const isPermanentSupplier = document.getElementById('product-permanent-supplier').checked;
     const gender = document.getElementById('product-gender').value || '';
     const size = document.getElementById('product-size').value.trim();
     const cost = parseFloat(document.getElementById('product-cost').value) || 0;
     const price = parseFloat(document.getElementById('product-price').value) || 0;
     const discount = parseFloat(document.getElementById('product-discount').value) || 0;
     const stock = parseInt(document.getElementById('product-stock').value) || 0;
-
     const article = generateArticle();
-
+    
+    // Обновляем маппинг брендов
+    if (brand) {
+        updateBrandMapping(brand, isPermanentSupplier);
+    }
+    
     btn.disabled = true;
     btn.textContent = 'Сохранение...';
-
     try {
         await window.firebaseFunctions.addDoc(
             window.firebaseFunctions.collection(window.firebaseDb, 'products'),
             {
-                article, name, category, brand, gender, size, cost, price, discount, stock,
+                article, name, category, brand, isPermanentSupplier, gender, size, cost, price, discount, stock,
                 createdAt: new Date().toISOString()
             }
         );
-        
         closeModal();
         await loadProducts();
     } catch (error) {
@@ -293,30 +395,32 @@ window.saveProduct = async function(btn) {
 
 window.updateProduct = async function(productId, btn) {
     const name = document.getElementById('product-name').value.trim();
-    
     if (!name) {
         showError('Название обязательно');
         return;
     }
-
     const category = document.getElementById('product-category').value.trim();
     const brand = document.getElementById('product-brand').value.trim();
+    const isPermanentSupplier = document.getElementById('product-permanent-supplier').checked;
     const gender = document.getElementById('product-gender').value || '';
     const size = document.getElementById('product-size').value.trim();
     const cost = parseFloat(document.getElementById('product-cost').value) || 0;
     const price = parseFloat(document.getElementById('product-price').value) || 0;
     const discount = parseFloat(document.getElementById('product-discount').value) || 0;
     const stock = parseInt(document.getElementById('product-stock').value) || 0;
-
+    
+    // Обновляем маппинг брендов
+    if (brand) {
+        updateBrandMapping(brand, isPermanentSupplier);
+    }
+    
     btn.disabled = true;
     btn.textContent = 'Сохранение...';
-
     try {
         await window.firebaseFunctions.updateDoc(
             window.firebaseFunctions.doc(window.firebaseDb, 'products', productId),
-            { name, category, brand, gender, size, cost, price, discount, stock }
+            { name, category, brand, isPermanentSupplier, gender, size, cost, price, discount, stock }
         );
-        
         closeModal();
         await loadProducts();
         updateDashboard();
@@ -539,7 +643,7 @@ window.addSaleItem = function() {
 
     currentSaleItems.push({
         productId: productId,
-        name: `${product.name} (${product.size || '—'})`,
+        name: `${product.name} (${product.size || '–'})`,
         maxStock: availableStock,
         quantity: 1,
         priceType: 'original',
@@ -893,6 +997,12 @@ document.getElementById('add-income-btn').addEventListener('click', () => {
             <input type="text" id="new-product-category" list="category-list" placeholder="Выберите или введите новое">
             <label>Бренд</label>
             <input type="text" id="new-product-brand" list="brand-list" placeholder="Выберите или введите новое">
+            <div id="new-permanent-supplier-wrapper" style="margin-top: 8px; margin-bottom: 16px; opacity: 0.5;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: not-allowed;">
+                    <input type="checkbox" id="new-product-permanent-supplier" disabled style="width: auto; margin: 0; cursor: not-allowed;">
+                    <span>Этот бренд – постоянный поставщик <span class="tooltip-trigger" data-tooltip="permanent-supplier">?</span></span>
+                </label>
+            </div>
             <label>Пол</label>
             <select id="new-product-gender">
                 <option value="">Не указан</option>
@@ -913,6 +1023,36 @@ document.getElementById('add-income-btn').addEventListener('click', () => {
         <button class="btn-primary" onclick="saveIncome(this)">Сохранить поступление</button>
     `;
     openModal('Добавить поступление', content);
+
+    // Инициализируем tooltip
+    initTooltips();
+    
+    // Обработчик для галочки постоянного поставщика в форме нового товара
+    setTimeout(() => {
+        const newBrandInput = document.getElementById('new-product-brand');
+        const newCheckboxWrapper = document.getElementById('new-permanent-supplier-wrapper');
+        const newCheckbox = document.getElementById('new-product-permanent-supplier');
+        const newCheckboxLabel = newCheckboxWrapper?.querySelector('label');
+        
+        if (newBrandInput && newCheckboxWrapper && newCheckbox && newCheckboxLabel) {
+            newBrandInput.addEventListener('input', () => {
+                const brandValue = newBrandInput.value.trim();
+                if (brandValue) {
+                    newCheckbox.disabled = false;
+                    newCheckbox.style.cursor = 'pointer';
+                    newCheckboxLabel.style.cursor = 'pointer';
+                    newCheckboxWrapper.style.opacity = '1';
+                    newCheckbox.checked = isBrandPermanent(brandValue);
+                } else {
+                    newCheckbox.disabled = true;
+                    newCheckbox.checked = false;
+                    newCheckbox.style.cursor = 'not-allowed';
+                    newCheckboxLabel.style.cursor = 'not-allowed';
+                    newCheckboxWrapper.style.opacity = '0.5';
+                }
+            });
+        }
+    }, 100);
     
     // Инициализируем поиск товаров
     initProductSearch('income-product-search', 'income-product-id', 'income-product-dropdown', (productId) => {
@@ -939,7 +1079,7 @@ window.editIncome = async function(incomeId) {
     editingIncomeId = incomeId;
     
     const product = products.find(p => p.id === incomeRecord.productId);
-    const productName = product ? `${product.name} (${product.size || '—'})` : incomeRecord.productName;
+    const productName = product ? `${product.name} (${product.size || '–'})` : incomeRecord.productName;
     
     // Создаём datalist для продавцов
     const sellers = [...new Set(sales.map(s => s.seller).filter(s => s))];
@@ -991,23 +1131,26 @@ window.saveIncome = async function(btn) {
     
     if (productId === 'new') {
         const newName = document.getElementById('new-product-name').value.trim();
-        
         if (!newName) {
             showError('Название нового товара обязательно');
             return;
         }
-
         const newCategory = document.getElementById('new-product-category').value.trim();
         const newBrand = document.getElementById('new-product-brand').value.trim();
+        const newIsPermanentSupplier = document.getElementById('new-product-permanent-supplier')?.checked || false;
         const newGender = document.getElementById('new-product-gender').value || '';
         const newSize = document.getElementById('new-product-size').value.trim();
         const newCost = parseFloat(document.getElementById('new-product-cost').value) || 0;
         const newPrice = parseFloat(document.getElementById('new-product-price').value) || 0;
         const newDiscount = parseFloat(document.getElementById('new-product-discount').value) || 0;
-
+        
+        // Обновляем маппинг брендов
+        if (newBrand) {
+            updateBrandMapping(newBrand, newIsPermanentSupplier);
+        }
+        
         btn.disabled = true;
         btn.textContent = 'Сохранение...';
-
         try {
             const newArticle = generateArticle();
             const docRef = await window.firebaseFunctions.addDoc(
@@ -1017,6 +1160,7 @@ window.saveIncome = async function(btn) {
                     name: newName,
                     category: newCategory,
                     brand: newBrand,
+                    isPermanentSupplier: newIsPermanentSupplier,
                     gender: newGender,
                     size: newSize,
                     cost: newCost,
@@ -1026,7 +1170,6 @@ window.saveIncome = async function(btn) {
                     createdAt: new Date().toISOString()
                 }
             );
-            
             productId = docRef.id;
             await loadProducts();
         } catch (error) {
@@ -1063,7 +1206,7 @@ window.saveIncome = async function(btn) {
             window.firebaseFunctions.collection(window.firebaseDb, 'income'),
             {
                 productId: productId,
-                productName: product ? `${product.name} (${product.size || '—'})` : 'Новый товар',
+                productName: product ? `${product.name} (${product.size || '–'})` : 'Новый товар',
                 quantity: quantity,
                 cost: product ? product.cost : 0,
                 totalAmount: totalAmount,
@@ -1135,7 +1278,7 @@ window.updateIncome = async function(incomeId, btn) {
             window.firebaseFunctions.doc(window.firebaseDb, 'income', incomeId),
             {
                 productId: productId,
-                productName: `${product.name} (${product.size || '—'})`,
+                productName: `${product.name} (${product.size || '–'})`,
                 quantity: quantity,
                 cost: product.cost,
                 totalAmount: totalAmount,
@@ -1715,6 +1858,285 @@ window.resetPlanFilters = function() {
     document.getElementById('plan-date-from').value = '';
     document.getElementById('plan-date-to').value = '';
     renderPlans();
+};
+
+// === БЫСТРЫЙ ПРИХОД ===
+window.showQuickIncome = function(productId) {
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+    
+    const content = `
+        <div style="padding: 10px 14px; background: var(--bg-tertiary); border-radius: 8px; margin-bottom: 16px;">
+            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Товар</div>
+            <div style="font-weight: 600; font-size: 14px;">${product.name} ${product.size ? '(' + product.size + ')' : ''}</div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Текущий остаток: <strong style="color: var(--accent);">${product.stock}</strong></div>
+        </div>
+        <label>Дата и время поступления</label>
+        <input type="datetime-local" id="quick-income-date" value="${getCurrentDateTimeLocal()}">
+        <label>Количество</label>
+        <input type="number" id="quick-income-quantity" min="1" value="1" required>
+        <button class="btn-primary" onclick="saveQuickIncome('${productId}', this)">Оприходовать</button>
+    `;
+    openModal('Приход товара', content);
+};
+
+window.saveQuickIncome = async function(productId, btn) {
+    const dateInput = document.getElementById('quick-income-date').value;
+    const quantity = parseInt(document.getElementById('quick-income-quantity').value);
+    
+    if (!dateInput) { showError('Укажите дату'); return; }
+    if (!quantity || quantity < 1) { showError('Укажите количество'); return; }
+    
+    const product = products.find(p => p.id === productId);
+    if (!product) { showError('Товар не найден'); return; }
+    
+    const totalAmount = (product.cost || 0) * quantity;
+    
+    btn.disabled = true;
+    btn.textContent = 'Сохранение...';
+    
+    try {
+        await window.firebaseFunctions.addDoc(
+            window.firebaseFunctions.collection(window.firebaseDb, 'income'),
+            {
+                productId: productId,
+                productName: `${product.name} (${product.size || '–'})`,
+                quantity: quantity,
+                cost: product.cost || 0,
+                totalAmount: totalAmount,
+                date: new Date(dateInput).toISOString()
+            }
+        );
+        
+        const newStock = product.stock + quantity;
+        await window.firebaseFunctions.updateDoc(
+            window.firebaseFunctions.doc(window.firebaseDb, 'products', productId),
+            { stock: newStock }
+        );
+        
+        closeModal();
+        await loadIncome();
+        await loadProducts();
+        updateDashboard();
+    } catch (error) {
+        showError('Ошибка при сохранении');
+        console.error(error);
+        btn.disabled = false;
+        btn.textContent = 'Оприходовать';
+    }
+};
+
+// === ИСТОРИЯ ПРИХОДОВ ===
+window.showIncomeHistory = function(productId) {
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+    
+    const records = income
+        .filter(i => i.productId === productId)
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    let listHtml;
+    if (records.length === 0) {
+        listHtml = '<div class="income-history-empty">Нет записей о приходах</div>';
+    } else {
+        listHtml = '<div class="income-history-list">' + records.map(r => `
+            <div class="income-history-item">
+                <div class="ih-info">
+                    <div class="ih-date">${formatDate(r.date)}</div>
+                    <div class="ih-quantity">+${r.quantity} шт. · ${formatCurrency(r.totalAmount)}</div>
+                </div>
+                <div style="display: flex; gap: 6px;">
+                    <button class="ih-edit" onclick="editIncomeRecord('${r.id}', '${productId}')">Изменить</button>
+                    <button class="ih-delete" onclick="deleteIncomeRecord('${r.id}', '${productId}')">Удалить</button>
+                </div>
+            </div>
+        `).join('') + '</div>';
+    }
+    
+    const content = `
+        <div style="padding: 10px 14px; background: var(--bg-tertiary); border-radius: 8px; margin-bottom: 16px;">
+            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Товар</div>
+            <div style="font-weight: 600; font-size: 14px;">${product.name} ${product.size ? '(' + product.size + ')' : ''}</div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Текущий остаток: <strong style="color: var(--accent);">${product.stock}</strong> · Всего приходов: <strong>${records.length}</strong></div>
+        </div>
+        <h4 style="font-size: 14px; margin-bottom: 8px;">История приходов</h4>
+        ${listHtml}
+    `;
+    openModal('История приходов', content);
+};
+
+window.editIncomeRecord = function(incomeId, productId) {
+    const record = income.find(i => i.id === incomeId);
+    if (!record) return;
+    
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+    
+    const recordDate = new Date(record.date);
+    const offset = recordDate.getTimezoneOffset();
+    const localDate = new Date(recordDate.getTime() - offset * 60000);
+    const dateValue = localDate.toISOString().slice(0, 16);
+    
+    const content = `
+        <div style="padding: 10px 14px; background: var(--bg-tertiary); border-radius: 8px; margin-bottom: 16px;">
+            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Товар</div>
+            <div style="font-weight: 600; font-size: 14px;">${product.name} ${product.size ? '(' + product.size + ')' : ''}</div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Текущий остаток: <strong style="color: var(--accent);">${product.stock}</strong></div>
+        </div>
+        <label>Дата и время поступления</label>
+        <input type="datetime-local" id="edit-income-date" value="${dateValue}">
+        <label>Количество</label>
+        <input type="number" id="edit-income-quantity" min="1" value="${record.quantity}" required>
+        <p style="font-size: 11px; color: var(--text-secondary); margin-top: 6px;">Текущее количество в этом приходе: <strong>${record.quantity}</strong> шт.</p>
+        <button class="btn-primary" onclick="saveEditedIncomeRecord('${incomeId}', '${productId}', ${record.quantity}, this)">Сохранить изменения</button>
+    `;
+    openModal('Редактировать приход', content);
+};
+
+window.saveEditedIncomeRecord = async function(incomeId, productId, oldQuantity, btn) {
+    const dateInput = document.getElementById('edit-income-date').value;
+    const newQuantity = parseInt(document.getElementById('edit-income-quantity').value);
+    
+    if (!dateInput) {
+        showError('Укажите дату');
+        return;
+    }
+    if (!newQuantity || newQuantity < 1) {
+        showError('Укажите количество');
+        return;
+    }
+    
+    const product = products.find(p => p.id === productId);
+    if (!product) {
+        showError('Товар не найден');
+        return;
+    }
+    
+    // Проверяем, что остаток не уйдёт в минус
+    const quantityDiff = newQuantity - oldQuantity;
+    const projectedStock = product.stock + quantityDiff;
+    
+    if (projectedStock < 0) {
+        showError(`Нельзя уменьшить количество. Уже продано больше, чем можно изменить. Максимальное уменьшение: ${product.stock} шт.`);
+        return;
+    }
+    
+    const totalAmount = (product.cost || 0) * newQuantity;
+    
+    btn.disabled = true;
+    btn.textContent = 'Сохранение...';
+    
+    try {
+        // Обновляем запись
+        await window.firebaseFunctions.updateDoc(
+            window.firebaseFunctions.doc(window.firebaseDb, 'income', incomeId),
+            {
+                quantity: newQuantity,
+                totalAmount: totalAmount,
+                date: new Date(dateInput).toISOString()
+            }
+        );
+        
+        // Обновляем остаток товара
+        await window.firebaseFunctions.updateDoc(
+            window.firebaseFunctions.doc(window.firebaseDb, 'products', productId),
+            { stock: projectedStock }
+        );
+        
+        closeModal();
+        await loadIncome();
+        await loadProducts();
+        updateDashboard();
+        showIncomeHistory(productId);
+    } catch (error) {
+        showError('Ошибка при сохранении');
+        console.error(error);
+        btn.disabled = false;
+        btn.textContent = 'Сохранить изменения';
+    }
+};
+
+window.deleteIncomeRecord = async function(incomeId, productId) {
+    const record = income.find(i => i.id === incomeId);
+    if (!record) return;
+    
+    if (!confirm(`Удалить приход от ${formatDate(record.date)} (${record.quantity} шт.)? Остаток будет уменьшен.`)) return;
+    
+    try {
+        await window.firebaseFunctions.deleteDoc(
+            window.firebaseFunctions.doc(window.firebaseDb, 'income', incomeId)
+        );
+        
+        const product = products.find(p => p.id === productId);
+        if (product) {
+            const newStock = Math.max(0, product.stock - record.quantity);
+            await window.firebaseFunctions.updateDoc(
+                window.firebaseFunctions.doc(window.firebaseDb, 'products', productId),
+                { stock: newStock }
+            );
+        }
+        
+        await loadIncome();
+        await loadProducts();
+        updateDashboard();
+        showIncomeHistory(productId);
+    } catch (error) {
+        showError('Ошибка при удалении');
+        console.error(error);
+    }
+};
+
+// === ВРЕМЕННАЯ АДМИНСКАЯ КНОПКА: генерация начальных поступлений ===
+window.generateInitialIncomes = async function(btn) {
+    const productsWithStock = products.filter(p => (p.stock || 0) > 0);
+    
+    if (productsWithStock.length === 0) {
+        showError('Нет товаров с остатком');
+        return;
+    }
+    
+    if (!confirm(`Будет создано ${productsWithStock.length} записей о поступлениях (по 1 на каждую штуку остатка) на дату 01.07.2026. Продолжить?`)) return;
+    
+    btn.disabled = true;
+    const originalText = btn.textContent;
+    btn.textContent = 'Генерация...';
+    
+    const fixedDate = new Date('2026-07-01T00:00:00').toISOString();
+    let created = 0;
+    
+    try {
+        for (const product of productsWithStock) {
+            const stock = product.stock || 0;
+            
+            // Создаём одну запись с общим количеством (вместо отдельных на каждую штуку)
+            const totalAmount = (product.cost || 0) * stock;
+            
+            await window.firebaseFunctions.addDoc(
+                window.firebaseFunctions.collection(window.firebaseDb, 'income'),
+                {
+                    productId: product.id,
+                    productName: `${product.name} (${product.size || '–'})`,
+                    quantity: stock,
+                    cost: product.cost || 0,
+                    totalAmount: totalAmount,
+                    date: fixedDate
+                }
+            );
+            
+            created++;
+            btn.textContent = `Генерация... ${created}/${productsWithStock.length}`;
+        }
+        
+        await loadIncome();
+        alert(`Готово! Создано записей: ${created}`);
+        
+    } catch (error) {
+        showError('Ошибка при генерации');
+        console.error(error);
+    }
+    
+    btn.disabled = false;
+    btn.textContent = originalText;
 };
 
 // === ПОИСК ТОВАРОВ С АВТОДОПОЛНЕНИЕМ ===

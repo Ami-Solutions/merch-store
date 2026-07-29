@@ -126,12 +126,14 @@
                 </div>
                 <div class="stats-grid">
                     <div class="stat-card">
-                        <h3>Продажи за период</h3>
+                        <h3>Продажи за период <span class="tooltip-trigger" data-tooltip="sales-total">?</span></h3>
                         <p class="stat-value" id="period-sales">0 ₽</p>
                     </div>
-                    <div class="stat-card">
-                        <h3>Чистая прибыль</h3>
-                        <p class="stat-value" id="period-profit" style="color: var(--success);">0 ₽</p>
+                    <div style="display: none;">
+                        <div class="stat-card">
+                            <h3>Чистая прибыль</h3>
+                            <p class="stat-value" id="period-profit" style="color: var(--success);">0 ₽</p>
+                        </div>
                     </div>
                     <div class="stat-card">
                         <h3>Количество продаж</h3>
@@ -159,11 +161,11 @@
                 </div>
                 <div class="stats-grid">
                     <div class="stat-card">
-                        <h3>Средний чек за период</h3>
+                        <h3>Средний чек <span class="tooltip-trigger" data-tooltip="avg-check">?</span></h3>
                         <p class="stat-value" id="period-avg">0 ₽</p>
                     </div>
                     <div class="stat-card">
-                        <h3>Медианный чек</h3>
+                        <h3>Медианный чек <span class="tooltip-trigger" data-tooltip="median-check">?</span></h3>
                         <p class="stat-value" id="period-median">0 ₽</p>
                     </div>
                     <div class="stat-card">
@@ -180,7 +182,7 @@
                     </div>
                     <div class="stat-card">
                         <h3>Последнее поступление</h3>
-                        <p class="stat-value-small" id="last-income">—</p>
+                        <p class="stat-value-small" id="last-income">–</p>
                     </div>
                     <div class="stat-card">
                         <h3>Всего позиций</h3>
@@ -242,6 +244,56 @@
                         <div class="chart-wrapper">
                             <canvas id="distribution-chart"></canvas>
                         </div>
+                    </div>
+                </div>
+
+                <div style="display: none;">
+                    <!-- Маржинальность по типам -->
+                    <div class="analytics-section">
+                        <h3>💰 Маржинальность по типам <span class="tooltip-trigger" data-tooltip="margin-by-type">?</span></h3>
+                        <div id="margin-by-type-container"></div>
+                    </div>
+
+                    <!-- Коэффициент наценки -->
+                    <div class="analytics-section">
+                        <h3>📈 Коэффициент наценки <span class="tooltip-trigger" data-tooltip="markup-coefficient">?</span></h3>
+                        <div id="markup-coefficient-container"></div>
+                    </div>
+
+                    <!-- ABC-анализ -->
+                    <div class="analytics-section">
+                        <h3>📊 ABC-анализ <span class="tooltip-trigger" data-tooltip="abc-analysis">?</span></h3>
+                        <div id="abc-analysis-container"></div>
+                    </div>
+
+                    <!-- Анализ размерной сетки -->
+                    <div class="analytics-section">
+                        <h3>📐 Анализ размерной сетки <span class="tooltip-trigger" data-tooltip="size-analysis">?</span></h3>
+                        <div id="size-analysis-container"></div>
+                    </div>
+
+                    <!-- Средний срок продажи -->
+                    <div class="analytics-section">
+                        <h3>⏱️ Средний срок продажи <span class="tooltip-trigger" data-tooltip="avg-sale-time">?</span></h3>
+                        <div id="avg-sale-time-container"></div>
+                    </div>
+
+                    <!-- Оборачиваемость по брендам -->
+                    <div class="analytics-section">
+                        <h3>🔄 Оборачиваемость по брендам <span class="tooltip-trigger" data-tooltip="brand-turnover">?</span></h3>
+                        <div id="brand-turnover-container"></div>
+                    </div>
+
+                    <!-- Процент проданных вещей -->
+                    <div class="analytics-section">
+                        <h3>📦 Процент проданных вещей <span class="tooltip-trigger" data-tooltip="sold-percentage">?</span></h3>
+                        <div id="sold-percentage-container"></div>
+                    </div>
+
+                    <!-- Залежавшиеся товары -->
+                    <div class="analytics-section">
+                        <h3>🗄️ Залежавшиеся товары <span class="tooltip-trigger" data-tooltip="stale-products">?</span></h3>
+                        <div id="stale-products-container"></div>
                     </div>
                 </div>
             </section>
@@ -354,7 +406,7 @@
                                 <th>Дата</th>
                                 <th>Товар</th>
                                 <th>Количество</th>
-                                <th>Сумма</th>
+                                <!-- <th>Сумма</th> -->
                                 <th>Действия</th>
                             </tr>
                         </thead>
@@ -453,7 +505,7 @@
                                 <th>Продавец</th>
                                 <th>План</th>
                                 <th>Факт</th>
-                                <th>Прибыль</th>
+                                <!-- Вернуть <th>Прибыль</th>-->
                                 <th>Выполнение</th>
                                 <th>Действия</th>
                             </tr>
@@ -469,8 +521,10 @@
                     <h2>Пользователи</h2>
                     <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                         <button class="btn-primary" id="add-user-btn">+ Добавить сотрудника</button>
-                        <!-- Кнопка для разработчика -->
-                        <!-- <button class="btn-secondary" id="trim-products-btn" onclick="trimAllProducts(this)">Обрезать лишние пробелы по всем записям</button> -->
+                        <!-- Кнопка для разработчика: генерация начальных поступлений -->
+                        <!-- <button class="btn-secondary" onclick="generateInitialIncomes(this)" style="background: var(--warning); color: white; border-color: var(--warning);">⚙️ Сгенерировать поступления на 01.07.2026</button> -->
+                        <!-- Кнопка для разработчика: обрезка пробелов -->
+                        <!-- <button class="btn-secondary" onclick="trimAllProducts(this)">Обрезать лишние пробелы</button> -->
                     </div>
                 </div>
                 <div class="table-container">
