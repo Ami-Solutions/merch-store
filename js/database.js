@@ -1875,7 +1875,7 @@ window.showQuickIncome = function(productId) {
         <input type="datetime-local" id="quick-income-date" value="${getCurrentDateTimeLocal()}">
         <label>Количество</label>
         <input type="number" id="quick-income-quantity" min="1" value="1" required>
-        <button class="btn-primary" onclick="saveQuickIncome('${productId}', this)">Оприходовать</button>
+        <button class="btn-primary" onclick="saveQuickIncome('${productId}', this)">Добавить приход</button>
     `;
     openModal('Приход товара', content);
 };
@@ -1922,7 +1922,7 @@ window.saveQuickIncome = async function(productId, btn) {
         showError('Ошибка при сохранении');
         console.error(error);
         btn.disabled = false;
-        btn.textContent = 'Оприходовать';
+        btn.textContent = 'Добавить приход';
     }
 };
 
