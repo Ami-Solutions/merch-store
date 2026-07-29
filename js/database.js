@@ -202,7 +202,7 @@ document.getElementById('add-product-btn').addEventListener('click', () => {
         <div id="permanent-supplier-wrapper" style="margin-top: 8px; margin-bottom: 16px; opacity: 0.5;">
             <label style="display: flex; align-items: center; gap: 8px; cursor: not-allowed;">
                 <input type="checkbox" id="product-permanent-supplier" disabled style="width: auto; margin: 0; cursor: not-allowed;">
-                <span>Этот бренд — постоянный поставщик <span class="tooltip-trigger" data-tooltip="permanent-supplier">?</span></span>
+                <span>Этот бренд – постоянный поставщик <span class="tooltip-trigger" data-tooltip="permanent-supplier">?</span></span>
             </label>
         </div>
         
@@ -340,7 +340,7 @@ window.editProduct = function(productId) {
         
         <div style="margin-top: 16px; padding: 14px 16px; background: var(--bg-tertiary); border-radius: 8px;">
             <label style="color: var(--text-secondary); font-size: 12px; margin-bottom: 6px; display: block;">Остаток (заполняется через "+ Приход")</label>
-            <input type="number" value="${product.stock || 0}" readonly style="background: var(--bg-quaternary); cursor: not-allowed; opacity: 0.7;">
+            <input type="number" id="product-stock" value="${product.stock || 0}" readonly style="background: var(--bg-quaternary); cursor: not-allowed; opacity: 0.7;">
             <div style="display: flex; gap: 8px; margin-top: 12px;">
                 <button class="btn-small" onclick="showQuickIncome('${productId}')" style="flex: 1;">+ Приход</button>
                 <button class="btn-secondary" onclick="showIncomeHistory('${productId}')" style="flex: 1; padding: 6px 12px; font-size: 13px;">📋 История</button>
@@ -436,7 +436,7 @@ window.saveProduct = async function(btn) {
                 window.firebaseFunctions.collection(window.firebaseDb, 'income'),
                 {
                     productId: docRef.id,
-                    productName: `${name} (${size || '—'})`,
+                    productName: `${name} (${size || '–'})`,
                     quantity: initialQuantity,
                     cost: cost,
                     totalAmount: cost * initialQuantity,
@@ -471,7 +471,7 @@ window.updateProduct = async function(productId, btn) {
     const cost = parseFloat(document.getElementById('product-cost').value) || 0;
     const price = parseFloat(document.getElementById('product-price').value) || 0;
     const discount = parseFloat(document.getElementById('product-discount').value) || 0;
-    const stock = parseInt(document.getElementById('product-stock').value) || 0;
+    // Остаток НЕ обновляем при редактировании – он управляется через приходы
     
     // Обновляем маппинг брендов
     if (brand) {
@@ -483,7 +483,7 @@ window.updateProduct = async function(productId, btn) {
     try {
         await window.firebaseFunctions.updateDoc(
             window.firebaseFunctions.doc(window.firebaseDb, 'products', productId),
-            { name, category, brand, isPermanentSupplier, gender, size, cost, price, discount, stock }
+            { name, category, brand, isPermanentSupplier, gender, size, cost, price, discount }
         );
         closeModal();
         await loadProducts();
@@ -1990,6 +1990,10 @@ window.saveQuickIncome = async function(productId, btn) {
     }
 };
 
+
+
+// Вместо: <div class="ih-quantity">+${r.quantity} шт.</div>
+// было: <div class="ih-quantity">+${r.quantity} шт. · ${formatCurrency(r.totalAmount)}</div> (с суммой (сумма))
 // === ИСТОРИЯ ПРИХОДОВ ===
 window.showIncomeHistory = function(productId) {
     const product = products.find(p => p.id === productId);
@@ -2007,7 +2011,7 @@ window.showIncomeHistory = function(productId) {
             <div class="income-history-item">
                 <div class="ih-info">
                     <div class="ih-date">${formatDate(r.date)}</div>
-                    <div class="ih-quantity">+${r.quantity} шт. · ${formatCurrency(r.totalAmount)}</div>
+                    <div class="ih-quantity">+${r.quantity} шт.</div>
                 </div>
                 <div style="display: flex; gap: 6px;">
                     <button class="ih-edit" onclick="editIncomeRecord('${r.id}', '${productId}')">Изменить</button>
