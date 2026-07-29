@@ -202,7 +202,7 @@ document.getElementById('add-product-btn').addEventListener('click', () => {
         <div id="permanent-supplier-wrapper" style="margin-top: 8px; margin-bottom: 16px; opacity: 0.5;">
             <label style="display: flex; align-items: center; gap: 8px; cursor: not-allowed;">
                 <input type="checkbox" id="product-permanent-supplier" disabled style="width: auto; margin: 0; cursor: not-allowed;">
-                <span>Этот бренд – постоянный поставщик <span class="tooltip-trigger" data-tooltip="permanent-supplier">?</span></span>
+                <span>Этот бренд — постоянный поставщик <span class="tooltip-trigger" data-tooltip="permanent-supplier">?</span></span>
             </label>
         </div>
         
@@ -228,8 +228,18 @@ document.getElementById('add-product-btn').addEventListener('click', () => {
         
         <div style="margin-top: 16px; padding: 14px 16px; background: var(--bg-tertiary); border-radius: 8px;">
             <label style="color: var(--text-secondary); font-size: 12px; margin-bottom: 6px; display: block;">Остаток (заполняется через "+ Приход")</label>
-            <input type="number" value="0" readonly style="background: var(--bg-quaternary); cursor: not-allowed; opacity: 0.7;">
-            <p style="font-size: 11px; color: var(--text-secondary); margin-top: 6px; margin-bottom: 0;">После сохранения товара используйте кнопку "+ Приход" в таблице товаров</p>
+            <input type="number" id="product-stock" value="0" readonly style="background: var(--bg-quaternary); cursor: not-allowed; opacity: 0.7;">
+            
+            <button type="button" class="btn-small" onclick="toggleInitialIncomeForm()" style="width: 100%; margin-top: 8px;">+ Приход</button>
+            
+            <div id="initial-income-form" style="display: none; margin-top: 12px; padding: 12px; background: var(--bg-quaternary); border-radius: 6px;">
+                <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; display: block;">Начальный приход</label>
+                <label style="font-size: 12px;">Дата и время поступления</label>
+                <input type="datetime-local" id="initial-income-date" value="${getCurrentDateTimeLocal()}">
+                <label style="font-size: 12px;">Количество</label>
+                <input type="number" id="initial-income-quantity" min="1" value="1" oninput="updateInitialStock()">
+                <p style="font-size: 11px; color: var(--text-secondary); margin-top: 8px; margin-bottom: 0;">Приход будет сохранён вместе с товаром</p>
+            </div>
         </div>
         
         <button class="btn-primary" onclick="saveProduct(this)">Сохранить</button>
@@ -260,6 +270,21 @@ document.getElementById('add-product-btn').addEventListener('click', () => {
         }
     });
 });
+
+window.toggleInitialIncomeForm = function() {
+    const form = document.getElementById('initial-income-form');
+    if (form.style.display === 'none') {
+        form.style.display = 'block';
+    } else {
+        form.style.display = 'none';
+        document.getElementById('product-stock').value = '0';
+    }
+};
+
+window.updateInitialStock = function() {
+    const quantity = parseInt(document.getElementById('initial-income-quantity').value) || 0;
+    document.getElementById('product-stock').value = quantity;
+};
 
 window.editProduct = function(productId) {
     const product = products.find(p => p.id === productId);
@@ -365,7 +390,26 @@ window.saveProduct = async function(btn) {
     const cost = parseFloat(document.getElementById('product-cost').value) || 0;
     const price = parseFloat(document.getElementById('product-price').value) || 0;
     const discount = parseFloat(document.getElementById('product-discount').value) || 0;
-    const stock = parseInt(document.getElementById('product-stock').value) || 0;
+    
+    // Проверяем, есть ли начальный приход
+    const initialIncomeForm = document.getElementById('initial-income-form');
+    const hasInitialIncome = initialIncomeForm && initialIncomeForm.style.display !== 'none';
+    
+    let initialQuantity = 0;
+    let initialDate = null;
+    
+    if (hasInitialIncome) {
+        const dateInput = document.getElementById('initial-income-date').value;
+        initialQuantity = parseInt(document.getElementById('initial-income-quantity').value) || 0;
+        
+        if (initialQuantity > 0 && dateInput) {
+            initialDate = new Date(dateInput).toISOString();
+        } else {
+            initialQuantity = 0;
+            initialDate = null;
+        }
+    }
+    
     const article = generateArticle();
     
     // Обновляем маппинг брендов
@@ -376,15 +420,35 @@ window.saveProduct = async function(btn) {
     btn.disabled = true;
     btn.textContent = 'Сохранение...';
     try {
-        await window.firebaseFunctions.addDoc(
+        // Создаём товар с начальным остатком
+        const docRef = await window.firebaseFunctions.addDoc(
             window.firebaseFunctions.collection(window.firebaseDb, 'products'),
             {
-                article, name, category, brand, isPermanentSupplier, gender, size, cost, price, discount, stock,
+                article, name, category, brand, isPermanentSupplier, gender, size, cost, price, discount,
+                stock: initialQuantity,
                 createdAt: new Date().toISOString()
             }
         );
+        
+        // Если был начальный приход, создаём запись в income
+        if (hasInitialIncome && initialQuantity > 0 && initialDate) {
+            await window.firebaseFunctions.addDoc(
+                window.firebaseFunctions.collection(window.firebaseDb, 'income'),
+                {
+                    productId: docRef.id,
+                    productName: `${name} (${size || '—'})`,
+                    quantity: initialQuantity,
+                    cost: cost,
+                    totalAmount: cost * initialQuantity,
+                    date: initialDate
+                }
+            );
+        }
+        
         closeModal();
         await loadProducts();
+        await loadIncome();
+        updateDashboard();
     } catch (error) {
         showError('Ошибка при сохранении товара');
         console.error(error);
