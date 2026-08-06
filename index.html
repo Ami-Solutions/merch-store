@@ -307,7 +307,10 @@
             <section id="products-section" class="content-section">
                 <div class="section-header">
                     <h2>Товары</h2>
-                    <button class="btn-primary" id="add-product-btn">+ Добавить товар</button>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn-secondary btn-refresh" onclick="refreshProducts()">🔄 Обновить</button>
+                        <button class="btn-primary" id="add-product-btn">+ Добавить товар</button>
+                    </div>
                 </div>
                 <div class="filters-container">
                     <div class="filter-group">
