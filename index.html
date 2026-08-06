@@ -7,6 +7,12 @@
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+    <!-- Лоадер при загрузке -->
+    <div id="global-loader" class="global-loader">
+        <div class="loader-spinner"></div>
+        <p>Загрузка данных...</p>
+    </div>
+
     <div id="auth-screen" class="screen active">
         <div class="auth-container">
             <img src="imgs/logo.png" alt="Мерч!" class="auth-logo">
@@ -108,7 +114,10 @@
 
             <!-- Дашборд -->
             <section id="dashboard-section" class="content-section">
-                <h2>Дашборд</h2>
+                <div class="section-header">
+                    <h2>Дашборд</h2>
+                    <button class="btn-secondary btn-refresh" onclick="refreshDashboard()">🔄 Обновить</button>
+                </div>
                 
                 <h3 class="dashboard-subtitle">Продажи</h3>
                 <div class="stats-controls">
@@ -129,11 +138,9 @@
                         <h3>Продажи за период <span class="tooltip-trigger" data-tooltip="sales-total">?</span></h3>
                         <p class="stat-value" id="period-sales">0 ₽</p>
                     </div>
-                    <div style="display: none;">
-                        <div class="stat-card">
-                            <h3>Чистая прибыль</h3>
-                            <p class="stat-value" id="period-profit" style="color: var(--success);">0 ₽</p>
-                        </div>
+                    <div class="stat-card">
+                        <h3>Чистая прибыль</h3>
+                        <p class="stat-value" id="period-profit" style="color: var(--success);">0 ₽</p>
                     </div>
                     <div class="stat-card">
                         <h3>Количество продаж</h3>
@@ -247,54 +254,52 @@
                     </div>
                 </div>
 
-                <div style="display: none;">
-                    <!-- Маржинальность по типам -->
-                    <div class="analytics-section">
-                        <h3>💰 Маржинальность по типам <span class="tooltip-trigger" data-tooltip="margin-by-type">?</span></h3>
-                        <div id="margin-by-type-container"></div>
-                    </div>
+                <!-- Маржинальность по типам -->
+                <div class="analytics-section">
+                    <h3>💰 Маржинальность по типам <span class="tooltip-trigger" data-tooltip="margin-by-type">?</span></h3>
+                    <div id="margin-by-type-container"></div>
+                </div>
 
-                    <!-- Коэффициент наценки -->
-                    <div class="analytics-section">
-                        <h3>📈 Коэффициент наценки <span class="tooltip-trigger" data-tooltip="markup-coefficient">?</span></h3>
-                        <div id="markup-coefficient-container"></div>
-                    </div>
+                <!-- Коэффициент наценки -->
+                <div class="analytics-section">
+                    <h3>📈 Коэффициент наценки <span class="tooltip-trigger" data-tooltip="markup-coefficient">?</span></h3>
+                    <div id="markup-coefficient-container"></div>
+                </div>
 
-                    <!-- ABC-анализ -->
-                    <div class="analytics-section">
-                        <h3>📊 ABC-анализ <span class="tooltip-trigger" data-tooltip="abc-analysis">?</span></h3>
-                        <div id="abc-analysis-container"></div>
-                    </div>
+                <!-- ABC-анализ -->
+                <div class="analytics-section">
+                    <h3>📊 ABC-анализ <span class="tooltip-trigger" data-tooltip="abc-analysis">?</span></h3>
+                    <div id="abc-analysis-container"></div>
+                </div>
 
-                    <!-- Анализ размерной сетки -->
-                    <div class="analytics-section">
-                        <h3>📐 Анализ размерной сетки <span class="tooltip-trigger" data-tooltip="size-analysis">?</span></h3>
-                        <div id="size-analysis-container"></div>
-                    </div>
+                <!-- Анализ размерной сетки -->
+                <div class="analytics-section">
+                    <h3>📐 Анализ размерной сетки <span class="tooltip-trigger" data-tooltip="size-analysis">?</span></h3>
+                    <div id="size-analysis-container"></div>
+                </div>
 
-                    <!-- Средний срок продажи -->
-                    <div class="analytics-section">
-                        <h3>⏱️ Средний срок продажи <span class="tooltip-trigger" data-tooltip="avg-sale-time">?</span></h3>
-                        <div id="avg-sale-time-container"></div>
-                    </div>
+                <!-- Средний срок продажи -->
+                <div class="analytics-section">
+                    <h3>⏱️ Средний срок продажи <span class="tooltip-trigger" data-tooltip="avg-sale-time">?</span></h3>
+                    <div id="avg-sale-time-container"></div>
+                </div>
 
-                    <!-- Оборачиваемость по брендам -->
-                    <div class="analytics-section">
-                        <h3>🔄 Оборачиваемость по брендам <span class="tooltip-trigger" data-tooltip="brand-turnover">?</span></h3>
-                        <div id="brand-turnover-container"></div>
-                    </div>
+                <!-- Оборачиваемость по брендам -->
+                <div class="analytics-section">
+                    <h3>🔄 Оборачиваемость по брендам <span class="tooltip-trigger" data-tooltip="brand-turnover">?</span></h3>
+                    <div id="brand-turnover-container"></div>
+                </div>
 
-                    <!-- Процент проданных вещей -->
-                    <div class="analytics-section">
-                        <h3>📦 Процент проданных вещей <span class="tooltip-trigger" data-tooltip="sold-percentage">?</span></h3>
-                        <div id="sold-percentage-container"></div>
-                    </div>
+                <!-- Процент проданных вещей -->
+                <div class="analytics-section">
+                    <h3>📦 Процент проданных вещей <span class="tooltip-trigger" data-tooltip="sold-percentage">?</span></h3>
+                    <div id="sold-percentage-container"></div>
+                </div>
 
-                    <!-- Залежавшиеся товары -->
-                    <div class="analytics-section">
-                        <h3>🗄️ Залежавшиеся товары <span class="tooltip-trigger" data-tooltip="stale-products">?</span></h3>
-                        <div id="stale-products-container"></div>
-                    </div>
+                <!-- Залежавшиеся товары -->
+                <div class="analytics-section">
+                    <h3>🗄️ Залежавшиеся товары <span class="tooltip-trigger" data-tooltip="stale-products">?</span></h3>
+                    <div id="stale-products-container"></div>
                 </div>
             </section>
 
@@ -302,7 +307,10 @@
             <section id="products-section" class="content-section">
                 <div class="section-header">
                     <h2>Товары</h2>
-                    <button class="btn-primary" id="add-product-btn">+ Добавить товар</button>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn-secondary btn-refresh" onclick="refreshProducts()">🔄 Обновить</button>
+                        <button class="btn-primary" id="add-product-btn">+ Добавить товар</button>
+                    </div>
                 </div>
                 
                 <div class="filters-container">
@@ -373,9 +381,11 @@
             <section id="income-section" class="content-section">
                 <div class="section-header">
                     <h2>Поступления</h2>
-                    <button class="btn-primary" id="add-income-btn">+ Добавить поступление</button>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn-secondary btn-refresh" onclick="refreshIncome()">🔄 Обновить</button>
+                        <button class="btn-primary" id="add-income-btn">+ Добавить поступление</button>
+                    </div>
                 </div>
-
                 <div class="filters-container">
                     <div class="filter-group">
                         <label>Поиск по товару</label>
@@ -390,15 +400,21 @@
                         <input type="date" id="income-date-to" class="filter-input">
                     </div>
                     <div class="filter-group filter-group-wide">
-                        <label>Сумма: <span id="income-amount-range-label">0 - 1000000 ₽</span></label>
+                        <label>Сумма закупки: <span id="income-cost-range-label">0 - 250000 ₽</span></label>
                         <div class="range-slider">
-                            <input type="range" id="income-amount-min" min="0" max="1000000" value="0" step="100">
-                            <input type="range" id="income-amount-max" min="0" max="1000000" value="1000000" step="100">
+                            <input type="range" id="income-cost-min" min="0" max="250000" value="0" step="100">
+                            <input type="range" id="income-cost-max" min="0" max="250000" value="250000" step="100">
+                        </div>
+                    </div>
+                    <div class="filter-group filter-group-wide">
+                        <label>Сумма продажи: <span id="income-sale-range-label">0 - 250000 ₽</span></label>
+                        <div class="range-slider">
+                            <input type="range" id="income-sale-min" min="0" max="250000" value="0" step="100">
+                            <input type="range" id="income-sale-max" min="0" max="250000" value="250000" step="100">
                         </div>
                     </div>
                     <button class="btn-secondary btn-reset-filters" onclick="resetIncomeFilters()">Сбросить</button>
                 </div>
-
                 <div class="table-container">
                     <table id="income-table">
                         <thead>
@@ -406,7 +422,8 @@
                                 <th>Дата</th>
                                 <th>Товар</th>
                                 <th>Количество</th>
-                                <!-- <th>Сумма</th> -->
+                                <th>Сумма закупки</th>
+                                <th>Сумма продажи</th>
                                 <th>Действия</th>
                             </tr>
                         </thead>
@@ -419,7 +436,10 @@
             <section id="sales-section" class="content-section">
                 <div class="section-header">
                     <h2>Продажи</h2>
-                    <button class="btn-primary" id="add-sale-btn">+ Добавить продажу</button>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn-secondary btn-refresh" onclick="refreshSales()">🔄 Обновить</button>
+                        <button class="btn-primary" id="add-sale-btn">+ Добавить продажу</button>
+                    </div>
                 </div>
 
                 <div class="filters-container">
@@ -467,11 +487,14 @@
                 </div>
             </section>
 
-                        <!-- Планы -->
+            <!-- Планы -->
             <section id="plans-section" class="content-section">
                 <div class="section-header">
                     <h2>Планы продаж</h2>
-                    <button class="btn-primary" id="add-plan-btn">+ Установить план</button>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn-secondary btn-refresh" onclick="refreshPlans()">🔄 Обновить</button>
+                        <button class="btn-primary" id="add-plan-btn">+ Установить план</button>
+                    </div>
                 </div>
 
                 <div class="filters-container">
@@ -505,7 +528,7 @@
                                 <th>Продавец</th>
                                 <th>План</th>
                                 <th>Факт</th>
-                                <!-- Вернуть <th>Прибыль</th>-->
+                                <th>Прибыль</th>
                                 <th>Выполнение</th>
                                 <th>Действия</th>
                             </tr>
@@ -520,6 +543,7 @@
                 <div class="section-header">
                     <h2>Пользователи</h2>
                     <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button class="btn-secondary btn-refresh" onclick="refreshUsers()">🔄 Обновить</button>
                         <button class="btn-primary" id="add-user-btn">+ Добавить сотрудника</button>
                         <!-- Кнопка для разработчика: генерация начальных поступлений -->
                         <!-- <button class="btn-secondary" onclick="generateInitialIncomes(this)" style="background: var(--warning); color: white; border-color: var(--warning);">⚙️ Сгенерировать поступления на 01.07.2026</button> -->

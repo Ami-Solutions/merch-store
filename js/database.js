@@ -22,8 +22,10 @@ let incomeFilters = {
     search: '',
     dateFrom: '',
     dateTo: '',
-    amountMin: 0,
-    amountMax: 1000000
+    costMin: 0,
+    costMax: 250000,
+    saleMin: 0,
+    saleMax: 250000
 };
 
 let salesFilters = {
@@ -1603,11 +1605,42 @@ function updateProductFilters() {
 }
 
 function updateIncomeFilters() {
-    const maxAmount = Math.max(...income.map(i => i.totalAmount || 0), 1000000);
-    const amountMaxInput = document.getElementById('income-amount-max');
-    if (amountMaxInput) {
-        amountMaxInput.max = maxAmount;
-        document.getElementById('income-amount-min').max = maxAmount;
+    // Вычисляем максимальные значения для фильтров
+    let maxCost = 0;
+    let maxSale = 0;
+    
+    income.forEach(i => {
+        const product = products.find(p => p.id === i.productId);
+        const costPerUnit = product ? (product.cost || 0) : (i.cost || 0);
+        const pricePerUnit = product ? (product.price || 0) : 0;
+        
+        const totalCost = costPerUnit * i.quantity;
+        const totalSale = pricePerUnit * i.quantity;
+        
+        if (totalCost > maxCost) maxCost = totalCost;
+        if (totalSale > maxSale) maxSale = totalSale;
+    });
+    
+    // Округляем вверх до ближайшей тысячи
+    maxCost = Math.ceil(maxCost / 1000) * 1000;
+    maxSale = Math.ceil(maxSale / 1000) * 1000;
+    
+    if (maxCost < 250000) maxCost = 250000;
+    if (maxSale < 250000) maxSale = 250000;
+    
+    const costMinInput = document.getElementById('income-cost-min');
+    const costMaxInput = document.getElementById('income-cost-max');
+    const saleMinInput = document.getElementById('income-sale-min');
+    const saleMaxInput = document.getElementById('income-sale-max');
+    
+    if (costMinInput && costMaxInput) {
+        costMinInput.max = maxCost;
+        costMaxInput.max = maxCost;
+    }
+    
+    if (saleMinInput && saleMaxInput) {
+        saleMinInput.max = maxSale;
+        saleMaxInput.max = maxSale;
     }
 }
 
@@ -1655,7 +1688,12 @@ function getFilteredProducts() {
 
 function getFilteredIncome() {
     return income.filter(i => {
-        if (incomeFilters.search && !i.productName.toLowerCase().includes(incomeFilters.search.toLowerCase())) return false;
+        // Поиск по названию
+        if (incomeFilters.search && !i.productName.toLowerCase().includes(incomeFilters.search.toLowerCase())) {
+            return false;
+        }
+        
+        // Фильтр по дате
         if (incomeFilters.dateFrom) {
             const fromDate = new Date(incomeFilters.dateFrom);
             const itemDate = new Date(i.date);
@@ -1667,7 +1705,24 @@ function getFilteredIncome() {
             const itemDate = new Date(i.date);
             if (itemDate > toDate) return false;
         }
-        if ((i.totalAmount || 0) < incomeFilters.amountMin || (i.totalAmount || 0) > incomeFilters.amountMax) return false;
+        
+        // Фильтр по сумме закупки
+        const product = products.find(p => p.id === i.productId);
+        const costPerUnit = product ? (product.cost || 0) : (i.cost || 0);
+        const totalCost = costPerUnit * i.quantity;
+        
+        if (totalCost < incomeFilters.costMin || totalCost > incomeFilters.costMax) {
+            return false;
+        }
+        
+        // Фильтр по сумме продажи
+        const pricePerUnit = product ? (product.price || 0) : 0;
+        const totalSale = pricePerUnit * i.quantity;
+        
+        if (totalSale < incomeFilters.saleMin || totalSale > incomeFilters.saleMax) {
+            return false;
+        }
+        
         return true;
     });
 }
@@ -1802,38 +1857,73 @@ document.getElementById('income-date-to')?.addEventListener('change', (e) => {
     renderIncome();
 });
 
-document.getElementById('income-amount-min')?.addEventListener('input', (e) => {
-    incomeFilters.amountMin = parseInt(e.target.value);
-    const max = parseInt(document.getElementById('income-amount-max').value);
-    if (incomeFilters.amountMin > max) {
-        document.getElementById('income-amount-max').value = incomeFilters.amountMin;
-        incomeFilters.amountMax = incomeFilters.amountMin;
+document.getElementById('income-cost-min')?.addEventListener('input', (e) => {
+    incomeFilters.costMin = parseInt(e.target.value);
+    const max = parseInt(document.getElementById('income-cost-max').value);
+    if (incomeFilters.costMin > max) {
+        document.getElementById('income-cost-max').value = incomeFilters.costMin;
+        incomeFilters.costMax = incomeFilters.costMin;
     }
-    document.getElementById('income-amount-range-label').textContent = 
-        `${incomeFilters.amountMin} - ${incomeFilters.amountMax} ₽`;
+    document.getElementById('income-cost-range-label').textContent = 
+        `${incomeFilters.costMin} - ${incomeFilters.costMax} ₽`;
     renderIncome();
 });
 
-document.getElementById('income-amount-max')?.addEventListener('input', (e) => {
-    incomeFilters.amountMax = parseInt(e.target.value);
-    const min = parseInt(document.getElementById('income-amount-min').value);
-    if (incomeFilters.amountMax < min) {
-        document.getElementById('income-amount-min').value = incomeFilters.amountMax;
-        incomeFilters.amountMin = incomeFilters.amountMax;
+document.getElementById('income-cost-max')?.addEventListener('input', (e) => {
+    incomeFilters.costMax = parseInt(e.target.value);
+    const min = parseInt(document.getElementById('income-cost-min').value);
+    if (incomeFilters.costMax < min) {
+        document.getElementById('income-cost-min').value = incomeFilters.costMax;
+        incomeFilters.costMin = incomeFilters.costMax;
     }
-    document.getElementById('income-amount-range-label').textContent = 
-        `${incomeFilters.amountMin} - ${incomeFilters.amountMax} ₽`;
+    document.getElementById('income-cost-range-label').textContent = 
+        `${incomeFilters.costMin} - ${incomeFilters.costMax} ₽`;
+    renderIncome();
+});
+
+document.getElementById('income-sale-min')?.addEventListener('input', (e) => {
+    incomeFilters.saleMin = parseInt(e.target.value);
+    const max = parseInt(document.getElementById('income-sale-max').value);
+    if (incomeFilters.saleMin > max) {
+        document.getElementById('income-sale-max').value = incomeFilters.saleMin;
+        incomeFilters.saleMax = incomeFilters.saleMin;
+    }
+    document.getElementById('income-sale-range-label').textContent = 
+        `${incomeFilters.saleMin} - ${incomeFilters.saleMax} ₽`;
+    renderIncome();
+});
+
+document.getElementById('income-sale-max')?.addEventListener('input', (e) => {
+    incomeFilters.saleMax = parseInt(e.target.value);
+    const min = parseInt(document.getElementById('income-sale-min').value);
+    if (incomeFilters.saleMax < min) {
+        document.getElementById('income-sale-min').value = incomeFilters.saleMax;
+        incomeFilters.saleMin = incomeFilters.saleMax;
+    }
+    document.getElementById('income-sale-range-label').textContent = 
+        `${incomeFilters.saleMin} - ${incomeFilters.saleMax} ₽`;
     renderIncome();
 });
 
 window.resetIncomeFilters = function() {
-    incomeFilters = { search: '', dateFrom: '', dateTo: '', amountMin: 0, amountMax: 1000000 };
+    incomeFilters = { 
+        search: '', 
+        dateFrom: '', 
+        dateTo: '', 
+        costMin: 0, 
+        costMax: 250000,
+        saleMin: 0,
+        saleMax: 250000
+    };
     document.getElementById('income-search').value = '';
     document.getElementById('income-date-from').value = '';
     document.getElementById('income-date-to').value = '';
-    document.getElementById('income-amount-min').value = 0;
-    document.getElementById('income-amount-max').value = 1000000;
-    document.getElementById('income-amount-range-label').textContent = '0 - 1000000 ₽';
+    document.getElementById('income-cost-min').value = 0;
+    document.getElementById('income-cost-max').value = 250000;
+    document.getElementById('income-cost-range-label').textContent = '0 - 250000 ₽';
+    document.getElementById('income-sale-min').value = 0;
+    document.getElementById('income-sale-max').value = 250000;
+    document.getElementById('income-sale-range-label').textContent = '0 - 250000 ₽';
     renderIncome();
 };
 

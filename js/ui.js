@@ -18,6 +18,9 @@ let currentDistributionType = 'category';
 // Состояние раскрытых групп в ABC-анализе
 let expandedABCGroups = { a: false, b: false, c: false };
 
+// Состояние раскрытия полного списка залежавшихся товаров
+let staleProductsExpanded = false;
+
 function getGenderLabel(gender) {
     const labels = { male: 'Мужское', female: 'Женское', unisex: 'Унисекс' };
     return labels[gender] || '–';
@@ -118,28 +121,34 @@ function renderSales() {
     }).join('');
 }
 
-
-// Если нужно будет вернуть сумму добавь строчку - <td>${formatCurrency(item.totalAmount)}</td> под строчку <td>${item.quantity}</td>
 function renderIncome() {
     const tbody = document.getElementById('income-tbody');
     const filtered = getFilteredIncome();
-    
-    tbody.innerHTML = filtered.map(item => `
-        <tr>
-            <td>${formatDate(item.date)}</td>
-            <td>${item.productName}</td>
-            <td>${item.quantity}</td>
-            <td>
-                <button class="action-btn edit" onclick="editIncome('${item.id}')">Изменить</button>
-                <button class="action-btn delete" onclick="deleteIncome('${item.id}', this)">Удалить</button>
-            </td>
-        </tr>
-    `).join('');
+    tbody.innerHTML = filtered.map(item => {
+        // Находим товар чтобы взять актуальные цены
+        const product = products.find(p => p.id === item.productId);
+        const costPerUnit = product ? (product.cost || 0) : (item.cost || 0);
+        const pricePerUnit = product ? (product.price || 0) : 0;
+        
+        const totalCost = costPerUnit * item.quantity;
+        const totalSale = pricePerUnit * item.quantity;
+        
+        return `
+            <tr>
+                <td>${formatDate(item.date)}</td>
+                <td>${item.productName}</td>
+                <td>${item.quantity}</td>
+                <td>${costPerUnit > 0 ? formatCurrency(totalCost) : '—'}</td>
+                <td>${pricePerUnit > 0 ? formatCurrency(totalSale) : '—'}</td>
+                <td>
+                    <button class="action-btn edit" onclick="editIncome('${item.id}')">Изменить</button>
+                    <button class="action-btn delete" onclick="deleteIncome('${item.id}', this)">Удалить</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
 }
 
-
-// под <td>${formatCurrency(fact)}</td>
-// вернуть <td style="color: ${profitColor}; font-weight: 600;">${formatCurrency(profit)}</td>
 function renderPlans() {
     const tbody = document.getElementById('plans-tbody');
     const filtered = getFilteredPlans();
@@ -160,6 +169,7 @@ function renderPlans() {
                 <td>${sellerLabel}</td>
                 <td>${formatCurrency(plan.targetAmount)}</td>
                 <td>${formatCurrency(fact)}</td>
+                <td style="color: ${profitColor}; font-weight: 600;">${formatCurrency(profit)}</td>
                 <td>
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <div style="flex: 1; height: 8px; background: var(--bg-tertiary); border-radius: 4px; overflow: hidden; min-width: 80px;">
@@ -234,10 +244,8 @@ function renderPlanCard(plan, fact, profit, percent) {
                 <div><strong>${percent}%</strong></div>
             </div>
             <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 13px; color: var(--text-secondary); display: flex; justify-content: space-between;">
-                <div style="display: none;">
-                    <span>Чистая прибыль:</span>
-                    <strong style="color: ${profitColor}; font-size: 15px;">${formatCurrency(profit)}</strong>
-                </div>
+                <span>Чистая прибыль:</span>
+                <strong style="color: ${profitColor}; font-size: 15px;">${formatCurrency(profit)}</strong>
             </div>
         </div>
     `;
@@ -652,7 +660,6 @@ function renderABCContent(metric) {
         };
     });
     
-    // Исключаем excludeFromStats
     sales.forEach(s => {
         if (s.excludeFromStats) return;
         if (s.items) {
@@ -791,7 +798,6 @@ function renderSizeAnalysis() {
         sizeData[size].stock += (p.stock || 0);
     });
     
-    // Исключаем excludeFromStats
     sales.forEach(s => {
         if (s.excludeFromStats) return;
         if (s.items) {
@@ -853,7 +859,6 @@ function renderAvgSaleTime() {
     
     const categoryData = {};
     
-    // Исключаем excludeFromStats
     sales.forEach(sale => {
         if (sale.excludeFromStats) return;
         if (!sale.items) return;
@@ -929,6 +934,9 @@ function renderAvgSaleTime() {
         <div class="analytics-summary" style="margin-top: 16px; padding: 12px 16px; background: var(--bg-tertiary); border-radius: 8px; font-size: 13px;">
             Средний срок продажи по всем категориям: <strong>${avgAll} дней</strong>
         </div>
+        <div style="margin-top: 12px; padding: 12px 16px; background: var(--bg-tertiary); border-radius: 8px; font-size: 12px; color: var(--text-secondary); border-left: 3px solid var(--accent);">
+            💡 <strong>Примечание:</strong> Эта метрика станет более показательной через 3-6 месяцев работы системы, когда накопится достаточная статистика по продажам.
+        </div>
     `;
 }
 
@@ -946,6 +954,9 @@ function renderBrandTurnover() {
             <div class="turnover-tab ${currentTurnoverType === 'secondhand' ? 'active' : ''}" data-type="secondhand" onclick="switchTurnoverType('secondhand')">Секонд-хенд</div>
         </div>
         <div id="turnover-content"></div>
+        <div style="margin-top: 12px; padding: 12px 16px; background: var(--bg-tertiary); border-radius: 8px; font-size: 12px; color: var(--text-secondary); border-left: 3px solid var(--accent);">
+            💡 <strong>Примечание:</strong> Эта метрика станет более показательной через 3-6 месяцев работы системы, когда накопится достаточная статистика по продажам.
+        </div>
     `;
     renderTurnoverContent();
 }
@@ -981,7 +992,6 @@ function renderTurnoverContent() {
         brandData[brand].stock += (p.stock || 0);
     });
     
-    // Исключаем excludeFromStats
     sales.forEach(s => {
         if (s.excludeFromStats) return;
         if (new Date(s.date) < periodAgo) return;
@@ -1054,7 +1064,12 @@ function renderTurnoverContent() {
     `;
 }
 
-// === ЗАЛЕЖАВШИЕСЯ ТОВАРЫ ===
+// === ЗАЛЕЖАВШИЕСЯ ТОВАРЫ (ИСПРАВЛЕННАЯ ЛОГИКА) ===
+window.toggleStaleProductsList = function() {
+    staleProductsExpanded = !staleProductsExpanded;
+    renderStaleProducts();
+};
+
 function renderStaleProducts() {
     const container = document.getElementById('stale-products-container');
     if (!container) return;
@@ -1068,8 +1083,19 @@ function renderStaleProducts() {
         const thresholdDays = p.isPermanentSupplier ? 90 : 120;
         const threshold = new Date(now.getTime() - thresholdDays * 86400000);
         
+        // Находим дату первого поступления этого товара
+        const productIncomes = income
+            .filter(i => i.productId === p.id)
+            .sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        const firstIncomeDate = productIncomes.length > 0 ? new Date(productIncomes[0].date) : null;
+        
+        // Если товар поступил меньше threshold дней назад - не считаем его залежавшимся
+        if (firstIncomeDate && firstIncomeDate > threshold) {
+            return; // Товар ещё "молодой", не считаем залежавшимся
+        }
+        
         let lastSaleDate = null;
-        // Исключаем excludeFromStats
         sales.forEach(s => {
             if (s.excludeFromStats) return;
             if (s.items) {
@@ -1085,7 +1111,7 @@ function renderStaleProducts() {
         if (!lastSaleDate || lastSaleDate < threshold) {
             const daysWithoutSales = lastSaleDate 
                 ? Math.round((now - lastSaleDate) / 86400000)
-                : null;
+                : (firstIncomeDate ? Math.round((now - firstIncomeDate) / 86400000) : null);
             const frozenMoney = (p.cost || 0) * p.stock;
             staleItems.push({
                 product: p,
@@ -1105,9 +1131,19 @@ function renderStaleProducts() {
     const totalFrozen = staleItems.reduce((sum, i) => sum + i.frozenMoney, 0);
     
     if (staleItems.length === 0) {
-        container.innerHTML = '<div class="analytics-empty">🎉 Отлично! Нет товаров без продаж сверх порога</div>';
+        container.innerHTML = `
+            <div class="analytics-empty">
+                🎉 Отлично! Нет товаров без продаж сверх порога
+                <div style="margin-top: 12px; font-size: 12px; color: var(--text-secondary);">
+                    Пороги: Бренды – 90 дней, Секонд-хенд – 120 дней
+                </div>
+            </div>
+        `;
         return;
     }
+    
+    const visibleItems = staleProductsExpanded ? staleItems : staleItems.slice(0, 12);
+    const hiddenCount = staleItems.length - 12;
     
     container.innerHTML = `
         <div class="stale-summary">
@@ -1129,7 +1165,7 @@ function renderStaleProducts() {
             </div>
         </div>
         <div class="stale-list">
-            ${staleItems.slice(0, 12).map(i => `
+            ${visibleItems.map(i => `
                 <div class="stale-item">
                     <div class="stale-name" title="${i.product.name} ${i.product.size ? '(' + i.product.size + ')' : ''}">
                         ${i.product.name} ${i.product.size ? '(' + i.product.size + ')' : ''}
@@ -1144,8 +1180,14 @@ function renderStaleProducts() {
                     </div>
                 </div>
             `).join('')}
-            ${staleItems.length > 12 ? `<div class="stale-item" style="justify-content: center;"><div class="stale-name" style="color: var(--text-secondary);">...ещё ${staleItems.length - 12} товаров</div></div>` : ''}
         </div>
+        ${hiddenCount > 0 || staleProductsExpanded ? `
+            <div style="text-align: center; margin-top: 16px;">
+                <button class="btn-secondary" onclick="toggleStaleProductsList()" style="padding: 10px 24px;">
+                    ${staleProductsExpanded ? '▲ Свернуть список' : `Показать все ${staleItems.length} товаров ▼`}
+                </button>
+            </div>
+        ` : ''}
     `;
 }
 
@@ -1317,7 +1359,6 @@ function renderSoldPercentage() {
         }
     });
     
-    // Исключаем excludeFromStats
     sales.forEach(sale => {
         if (sale.excludeFromStats) return;
         if (new Date(sale.date) < sixMonthsAgo) return;
@@ -1368,6 +1409,9 @@ function renderSoldPercentage() {
             Норма для брендов: 60-70%, для секонда: 70-80%. 
             ${brandPercent < 60 ? '<br><strong style="color: var(--warning);">⚠️ Бренды ниже нормы – проверьте цены или ассортимент</strong>' : ''}
             ${secondhandPercent < 70 ? '<br><strong style="color: var(--warning);">⚠️ Секонд ниже нормы – проверьте качество или цены</strong>' : ''}
+        </div>
+        <div style="margin-top: 12px; padding: 12px 16px; background: var(--bg-tertiary); border-radius: 8px; font-size: 12px; color: var(--text-secondary); border-left: 3px solid var(--accent);">
+            💡 <strong>Примечание:</strong> Эта метрика станет более показательной через 3-6 месяцев работы системы, когда накопится достаточная статистика по продажам.
         </div>
     `;
 }

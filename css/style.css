@@ -1978,3 +1978,57 @@ tr:hover { background: var(--bg-tertiary); }
 .ih-edit:hover {
     background: var(--accent-hover);
 }
+
+/* Global Loader */
+.global-loader {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(15, 15, 15, 0.95);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    z-index: 9999;
+}
+
+.global-loader.active {
+    display: flex;
+}
+
+.loader-spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid var(--bg-tertiary);
+    border-top: 4px solid var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 16px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.global-loader p {
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 500;
+}
+
+/* Refresh Button */
+.btn-refresh {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+}
+
+.btn-refresh:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+}

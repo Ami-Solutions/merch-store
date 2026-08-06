@@ -29,6 +29,21 @@ function updateThemeIcons(theme) {
     });
 }
 
+// === LOADER SYSTEM ===
+function showLoader() {
+    const loader = document.getElementById('global-loader');
+    if (loader) {
+        loader.classList.add('active');
+    }
+}
+
+function hideLoader() {
+    const loader = document.getElementById('global-loader');
+    if (loader) {
+        loader.classList.remove('active');
+    }
+}
+
 // === TOOLTIP SYSTEM ===
 const TOOLTIPS = {
     'sales-total': {
@@ -116,7 +131,6 @@ function initTooltips() {
             ${data.example ? `<div class="tooltip-example">${data.example}</div>` : ''}
         `;
         
-        // Показываем tooltip временно для расчёта размеров
         tooltipEl.style.visibility = 'hidden';
         tooltipEl.style.display = 'block';
         tooltipEl.classList.add('show');
@@ -126,23 +140,19 @@ function initTooltips() {
         const viewportWidth = window.innerWidth;
         const viewportHeight = window.innerHeight;
         
-        // Позиционируем по центру под триггером
         let left = triggerRect.left + (triggerRect.width / 2) - (tooltipRect.width / 2);
         let top = triggerRect.bottom + 8;
         
-        // Корректировка по горизонтали
         if (left < 10) {
             left = 10;
         } else if (left + tooltipRect.width > viewportWidth - 10) {
             left = viewportWidth - tooltipRect.width - 10;
         }
         
-        // Корректировка по вертикали (если не помещается снизу)
         if (top + tooltipRect.height > viewportHeight - 10) {
             top = triggerRect.top - tooltipRect.height - 8;
         }
         
-        // Применяем позицию
         tooltipEl.style.left = `${left}px`;
         tooltipEl.style.top = `${top}px`;
         tooltipEl.style.transform = 'none';
@@ -225,14 +235,17 @@ document.addEventListener('DOMContentLoaded', () => {
 function showAuth() {
     document.getElementById('auth-screen').classList.add('active');
     document.getElementById('app-screen').classList.remove('active');
+    hideLoader();
 }
 
 async function showApp(user) {
+    showLoader();
     document.getElementById('auth-screen').classList.remove('active');
     document.getElementById('app-screen').classList.add('active');
     await loadUserData(user);
     document.getElementById('welcome-username').textContent = window.currentUser.name || 'пользователь';
     await Promise.all([loadProducts(), loadSales(), loadIncome(), loadPlans()]);
+    hideLoader();
 }
 
 function switchSection(sectionName) {
@@ -287,3 +300,41 @@ function formatDateShort(dateStr) {
         day: '2-digit', month: '2-digit', year: 'numeric'
     });
 }
+
+// === REFRESH FUNCTIONS ===
+window.refreshDashboard = async function() {
+    showLoader();
+    await Promise.all([loadProducts(), loadSales(), loadIncome(), loadPlans()]);
+    updateDashboard();
+    hideLoader();
+};
+
+window.refreshProducts = async function() {
+    showLoader();
+    await loadProducts();
+    hideLoader();
+};
+
+window.refreshIncome = async function() {
+    showLoader();
+    await loadIncome();
+    hideLoader();
+};
+
+window.refreshSales = async function() {
+    showLoader();
+    await loadSales();
+    hideLoader();
+};
+
+window.refreshPlans = async function() {
+    showLoader();
+    await loadPlans();
+    hideLoader();
+};
+
+window.refreshUsers = async function() {
+    showLoader();
+    await loadUsers();
+    hideLoader();
+};
