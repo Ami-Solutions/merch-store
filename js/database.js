@@ -23,9 +23,9 @@ let incomeFilters = {
     dateFrom: '',
     dateTo: '',
     costMin: 0,
-    costMax: 250000,
+    costMax: 1000000,
     saleMin: 0,
-    saleMax: 250000
+    saleMax: 1000000
 };
 
 let salesFilters = {
@@ -1627,8 +1627,8 @@ function updateIncomeFilters() {
     maxCost = Math.ceil(maxCost / 1000) * 1000;
     maxSale = Math.ceil(maxSale / 1000) * 1000;
     
-    if (maxCost < 250000) maxCost = 250000;
-    if (maxSale < 250000) maxSale = 250000;
+    if (maxCost < 1000000) maxCost = 1000000;
+    if (maxSale < 1000000) maxSale = 1000000;
     
     const costMinInput = document.getElementById('income-cost-min');
     const costMaxInput = document.getElementById('income-cost-max');
@@ -1678,7 +1678,11 @@ function updatePlanFilters() {
 
 function getFilteredProducts() {
     return products.filter(p => {
-        if (productFilters.search && !p.name.toLowerCase().includes(productFilters.search.toLowerCase())) return false;
+        // УМНЫЙ ПОИСК по всем полям товара
+        if (productFilters.search) {
+            const searchText = `${p.name || ''} ${p.category || ''} ${p.brand || ''} ${p.size || ''}`;
+            if (!smartSearch(searchText, productFilters.search)) return false;
+        }
         if (productFilters.category && !p.category.toLowerCase().includes(productFilters.category.toLowerCase())) return false;
         if (productFilters.gender && p.gender !== productFilters.gender) return false;
         if (productFilters.brand && !p.brand.toLowerCase().includes(productFilters.brand.toLowerCase())) return false;
@@ -1918,19 +1922,19 @@ window.resetIncomeFilters = function() {
         dateFrom: '', 
         dateTo: '', 
         costMin: 0, 
-        costMax: 250000,
+        costMax: 1000000,
         saleMin: 0,
-        saleMax: 250000
+        saleMax: 1000000
     };
     document.getElementById('income-search').value = '';
     document.getElementById('income-date-from').value = '';
     document.getElementById('income-date-to').value = '';
     document.getElementById('income-cost-min').value = 0;
-    document.getElementById('income-cost-max').value = 250000;
-    document.getElementById('income-cost-range-label').textContent = '0 - 250000 ₽';
+    document.getElementById('income-cost-max').value = 1000000;
+    document.getElementById('income-cost-range-label').textContent = '0 - 1000000 ₽';
     document.getElementById('income-sale-min').value = 0;
-    document.getElementById('income-sale-max').value = 250000;
-    document.getElementById('income-sale-range-label').textContent = '0 - 250000 ₽';
+    document.getElementById('income-sale-max').value = 1000000;
+    document.getElementById('income-sale-range-label').textContent = '0 - 1000000 ₽';
     renderIncome();
 };
 
