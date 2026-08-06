@@ -52,6 +52,17 @@ function getCurrentDateTimeLocal() {
     return local.toISOString().slice(0, 16);
 }
 
+// === УМНЫЙ ПОИСК ===
+function smartSearch(text, query) {
+    if (!query || !text) return false;
+    
+    const searchWords = query.toLowerCase().trim().split(/\s+/);
+    const textLower = text.toLowerCase();
+    
+    // Все слова из запроса должны быть в тексте
+    return searchWords.every(word => textLower.includes(word));
+}
+
 // === УТИЛИТЫ ДЛЯ ПОЛУЧЕНИЯ СУЩЕСТВУЮЩИХ ЗНАЧЕНИЙ ===
 function getUniqueValues(field) {
     const values = [...new Set(products.map(p => p[field]).filter(v => v && v.trim()))];
@@ -1571,29 +1582,20 @@ function updateProductFilters() {
     const brands = [...new Set(products.map(p => p.brand).filter(b => b))];
     const sizes = [...new Set(products.map(p => p.size).filter(s => s))];
 
-    const categorySelect = document.getElementById('product-category-filter');
-    const brandSelect = document.getElementById('product-brand-filter');
-    const sizeSelect = document.getElementById('product-size-filter');
-
-    if (categorySelect) {
-        const currentVal = categorySelect.value;
-        categorySelect.innerHTML = '<option value="">Все категории</option>' + 
-            categories.map(c => `<option value="${c}">${c}</option>`).join('');
-        categorySelect.value = currentVal;
+    const categoryList = document.getElementById('category-filter-list');
+    const brandList = document.getElementById('brand-filter-list');
+    const sizeList = document.getElementById('size-filter-list');
+    
+    if (categoryList) {
+        categoryList.innerHTML = categories.map(c => `<option value="${c}">`).join('');
     }
-
-    if (brandSelect) {
-        const currentVal = brandSelect.value;
-        brandSelect.innerHTML = '<option value="">Все бренды</option>' + 
-            brands.map(b => `<option value="${b}">${b}</option>`).join('');
-        brandSelect.value = currentVal;
+    
+    if (brandList) {
+        brandList.innerHTML = brands.map(b => `<option value="${b}">`).join('');
     }
-
-    if (sizeSelect) {
-        const currentVal = sizeSelect.value;
-        sizeSelect.innerHTML = '<option value="">Все размеры</option>' + 
-            sizes.map(s => `<option value="${s}">${s}</option>`).join('');
-        sizeSelect.value = currentVal;
+    
+    if (sizeList) {
+        sizeList.innerHTML = sizes.map(s => `<option value="${s}">`).join('');
     }
 
     const maxPrice = Math.max(...products.map(p => p.price || 0), 1000000);
@@ -1677,10 +1679,10 @@ function updatePlanFilters() {
 function getFilteredProducts() {
     return products.filter(p => {
         if (productFilters.search && !p.name.toLowerCase().includes(productFilters.search.toLowerCase())) return false;
-        if (productFilters.category && p.category !== productFilters.category) return false;
+        if (productFilters.category && !p.category.toLowerCase().includes(productFilters.category.toLowerCase())) return false;
         if (productFilters.gender && p.gender !== productFilters.gender) return false;
-        if (productFilters.brand && p.brand !== productFilters.brand) return false;
-        if (productFilters.size && p.size !== productFilters.size) return false;
+        if (productFilters.brand && !p.brand.toLowerCase().includes(productFilters.brand.toLowerCase())) return false;
+        if (productFilters.size && !p.size.toLowerCase().includes(productFilters.size.toLowerCase())) return false;
         if ((p.price || 0) < productFilters.priceMin || (p.price || 0) > productFilters.priceMax) return false;
         return true;
     });
@@ -1688,9 +1690,11 @@ function getFilteredProducts() {
 
 function getFilteredIncome() {
     return income.filter(i => {
-        // Поиск по названию
-        if (incomeFilters.search && !i.productName.toLowerCase().includes(incomeFilters.search.toLowerCase())) {
-            return false;
+        // УМНЫЙ ПОИСК по названию товара
+        if (incomeFilters.search) {
+            if (!smartSearch(i.productName || '', incomeFilters.search)) {
+                return false;
+            }
         }
         
         // Фильтр по дате
@@ -1729,10 +1733,10 @@ function getFilteredIncome() {
 
 function getFilteredSales() {
     return sales.filter(s => {
+        // УМНЫЙ ПОИСК по товарам в продаже
         if (salesFilters.search) {
-            const search = salesFilters.search.toLowerCase();
             const hasMatch = s.items ? s.items.some(item => 
-                item.productName.toLowerCase().includes(search)
+                smartSearch(item.productName || '', salesFilters.search)
             ) : false;
             if (!hasMatch) return false;
         }
@@ -1755,7 +1759,10 @@ function getFilteredSales() {
 
 function getFilteredPlans() {
     return plans.filter(p => {
-        if (planFilters.search && !p.name.toLowerCase().includes(planFilters.search.toLowerCase())) return false;
+        // УМНЫЙ ПОИСК по названию плана
+        if (planFilters.search) {
+            if (!smartSearch(p.name || '', planFilters.search)) return false;
+        }
         if (planFilters.seller) {
             if (planFilters.seller === '__all__') { 
                 if (p.assignedSeller) return false; 
@@ -1784,7 +1791,7 @@ document.getElementById('product-search')?.addEventListener('input', (e) => {
     renderProducts();
 });
 
-document.getElementById('product-category-filter')?.addEventListener('change', (e) => {
+document.getElementById('product-category-filter')?.addEventListener('input', (e) => {
     productFilters.category = e.target.value;
     renderProducts();
 });
@@ -1794,12 +1801,12 @@ document.getElementById('product-gender-filter')?.addEventListener('change', (e)
     renderProducts();
 });
 
-document.getElementById('product-brand-filter')?.addEventListener('change', (e) => {
+document.getElementById('product-brand-filter')?.addEventListener('input', (e) => {
     productFilters.brand = e.target.value;
     renderProducts();
 });
 
-document.getElementById('product-size-filter')?.addEventListener('change', (e) => {
+document.getElementById('product-size-filter')?.addEventListener('input', (e) => {
     productFilters.size = e.target.value;
     renderProducts();
 });
@@ -2080,10 +2087,6 @@ window.saveQuickIncome = async function(productId, btn) {
     }
 };
 
-
-
-// Вместо: <div class="ih-quantity">+${r.quantity} шт.</div>
-// было: <div class="ih-quantity">+${r.quantity} шт. · ${formatCurrency(r.totalAmount)}</div> (с суммой (сумма))
 // === ИСТОРИЯ ПРИХОДОВ ===
 window.showIncomeHistory = function(productId) {
     const product = products.find(p => p.id === productId);
@@ -2297,7 +2300,7 @@ window.generateInitialIncomes = async function(btn) {
     btn.textContent = originalText;
 };
 
-// === ПОИСК ТОВАРОВ С АВТОДОПОЛНЕНИЕМ ===
+// === ПОИСК ТОВАРОВ С АВТОДОПОЛНЕНИЕМ (УМНЫЙ ПОИСК) ===
 function initProductSearch(searchInputId, hiddenInputId, dropdownId, onSelectCallback) {
     const searchInput = document.getElementById(searchInputId);
     const hiddenInput = document.getElementById(hiddenInputId);
@@ -2317,12 +2320,10 @@ function initProductSearch(searchInputId, hiddenInputId, dropdownId, onSelectCal
             return;
         }
         
-        // Фильтруем товары
+        // УМНЫЙ ПОИСК: ищем по названию, бренду, категории и размеру
         const filtered = products.filter(p => {
-            const name = (p.name || '').toLowerCase();
-            const brand = (p.brand || '').toLowerCase();
-            const category = (p.category || '').toLowerCase();
-            return name.includes(query) || brand.includes(query) || category.includes(query);
+            const searchText = `${p.name || ''} ${p.category || ''} ${p.brand || ''} ${p.size || ''}`;
+            return smartSearch(searchText, query);
         }).slice(0, 10); // Показываем максимум 10 результатов
         
         if (filtered.length === 0) {
