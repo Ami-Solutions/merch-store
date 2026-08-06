@@ -138,8 +138,8 @@ function renderIncome() {
                 <td>${formatDate(item.date)}</td>
                 <td>${item.productName}</td>
                 <td>${item.quantity}</td>
-                <td>${costPerUnit > 0 ? formatCurrency(totalCost) : '—'}</td>
-                <td>${pricePerUnit > 0 ? formatCurrency(totalSale) : '—'}</td>
+                <td>${costPerUnit > 0 ? formatCurrency(totalCost) : '–'}</td>
+                <td>${pricePerUnit > 0 ? formatCurrency(totalSale) : '–'}</td>
                 <td>
                     <button class="action-btn edit" onclick="editIncome('${item.id}')">Изменить</button>
                     <button class="action-btn delete" onclick="deleteIncome('${item.id}', this)">Удалить</button>
