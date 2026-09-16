@@ -6,6 +6,12 @@ let allUsers = [];
 let currentSaleItems = [];
 let editingSaleId = null;
 let editingIncomeId = null;
+let editingIncomeSnapshot = null;
+let editingSaleSnapshot = null;
+
+function stockErrorMessage(error, fallback) {
+    return error.isStockError ? error.message : fallback;
+}
 
 // Фильтры
 let productFilters = {
@@ -390,6 +396,7 @@ window.editProduct = function(productId) {
 };
 
 window.saveProduct = async function(btn) {
+    if (btn.disabled) return;
     const name = document.getElementById('product-name').value.trim();
     if (!name) {
         showError('Название обязательно');
@@ -413,7 +420,11 @@ window.saveProduct = async function(btn) {
     
     if (hasInitialIncome) {
         const dateInput = document.getElementById('initial-income-date').value;
-        initialQuantity = parseInt(document.getElementById('initial-income-quantity').value) || 0;
+        initialQuantity = Number(document.getElementById('initial-income-quantity').value);
+        if (!Number.isSafeInteger(initialQuantity) || initialQuantity < 1 || !dateInput) {
+            showError('Укажите дату и целое количество больше нуля');
+            return;
+        }
         
         if (initialQuantity > 0 && dateInput) {
             initialDate = new Date(dateInput).toISOString();
@@ -433,37 +444,28 @@ window.saveProduct = async function(btn) {
     btn.disabled = true;
     btn.textContent = 'Сохранение...';
     try {
-        // Создаём товар с начальным остатком
-        const docRef = await window.firebaseFunctions.addDoc(
-            window.firebaseFunctions.collection(window.firebaseDb, 'products'),
+        await window.stockOperations.createProduct(
             {
                 article, name, category, brand, isPermanentSupplier, gender, size, cost, price, discount,
                 stock: initialQuantity,
                 createdAt: new Date().toISOString()
-            }
+            },
+            hasInitialIncome ? {
+                productName: `${name} (${size || '–'})`,
+                quantity: initialQuantity,
+                cost: cost,
+                totalAmount: cost * initialQuantity,
+                date: initialDate
+            } : null,
+            btn
         );
-        
-        // Если был начальный приход, создаём запись в income
-        if (hasInitialIncome && initialQuantity > 0 && initialDate) {
-            await window.firebaseFunctions.addDoc(
-                window.firebaseFunctions.collection(window.firebaseDb, 'income'),
-                {
-                    productId: docRef.id,
-                    productName: `${name} (${size || '–'})`,
-                    quantity: initialQuantity,
-                    cost: cost,
-                    totalAmount: cost * initialQuantity,
-                    date: initialDate
-                }
-            );
-        }
         
         closeModal();
         await loadProducts();
         await loadIncome();
         updateDashboard();
     } catch (error) {
-        showError('Ошибка при сохранении товара');
+        showError(stockErrorMessage(error, 'Ошибка при сохранении товара'));
         console.error(error);
         btn.disabled = false;
         btn.textContent = 'Сохранить';
@@ -611,6 +613,7 @@ window.editSale = function(saleId) {
     if (!sale || !sale.items) return;
 
     editingSaleId = saleId;
+    editingSaleSnapshot = JSON.parse(JSON.stringify(sale));
     currentSaleItems = sale.items.map(item => {
         const product = products.find(p => p.id === item.productId);
         const currentStock = product ? product.stock : 0;
@@ -716,6 +719,11 @@ window.addSaleItem = function() {
                 availableStock += oldItem.quantity;
             }
         }
+    }
+
+    if (!Number.isSafeInteger(availableStock) || availableStock < 1) {
+        showError('Товара нет в наличии. Обновите остатки перед продажей');
+        return;
     }
 
     currentSaleItems.push({
@@ -834,6 +842,7 @@ function renderSaleCart() {
 }
 
 window.saveSale = async function(btn) {
+    if (btn.disabled) return;
     if (currentSaleItems.length === 0) {
         showError('Добавьте хотя бы один товар в корзину');
         return;
@@ -858,8 +867,7 @@ window.saveSale = async function(btn) {
     btn.textContent = 'Сохранение...';
 
     try {
-        await window.firebaseFunctions.addDoc(
-            window.firebaseFunctions.collection(window.firebaseDb, 'sales'),
+        await window.stockOperations.save('sales',
             {
                 items: currentSaleItems.map(item => ({
                     productId: item.productId,
@@ -873,19 +881,8 @@ window.saveSale = async function(btn) {
                 seller: sellerInput,
                 date: new Date(dateInput).toISOString(),
                 excludeFromStats: excludeFromStats
-            }
+            }, null, btn
         );
-
-        for (const item of currentSaleItems) {
-            const product = products.find(p => p.id === item.productId);
-            if (product) {
-                const newStock = product.stock - item.quantity;
-                await window.firebaseFunctions.updateDoc(
-                    window.firebaseFunctions.doc(window.firebaseDb, 'products', item.productId),
-                    { stock: newStock }
-                );
-            }
-        }
 
         closeModal();
         currentSaleItems = [];
@@ -894,7 +891,7 @@ window.saveSale = async function(btn) {
         await loadProducts();
         updateDashboard();
     } catch (error) {
-        showError('Ошибка при сохранении продажи');
+        showError(stockErrorMessage(error, 'Ошибка при сохранении продажи'));
         console.error(error);
         btn.disabled = false;
         btn.textContent = 'Оформить продажу';
@@ -902,6 +899,7 @@ window.saveSale = async function(btn) {
 };
 
 window.updateSale = async function(saleId, btn) {
+    if (btn.disabled) return;
     if (currentSaleItems.length === 0) {
         showError('Добавьте хотя бы один товар в корзину');
         return;
@@ -920,7 +918,7 @@ window.updateSale = async function(saleId, btn) {
         return;
     }
 
-    const oldSale = sales.find(s => s.id === saleId);
+    const oldSale = editingSaleSnapshot?.id === saleId ? editingSaleSnapshot : sales.find(s => s.id === saleId);
     if (!oldSale) return;
 
     const totalAmount = currentSaleItems.reduce((sum, item) => sum + item.finalPrice * item.quantity, 0);
@@ -929,21 +927,7 @@ window.updateSale = async function(saleId, btn) {
     btn.textContent = 'Сохранение...';
 
     try {
-        // Откатываем старые остатки (ОБНОВЛЯЕМ И В ПАМЯТИ!)
-        for (const oldItem of oldSale.items) {
-            const product = products.find(p => p.id === oldItem.productId);
-            if (product) {
-                product.stock += oldItem.quantity;
-                await window.firebaseFunctions.updateDoc(
-                    window.firebaseFunctions.doc(window.firebaseDb, 'products', oldItem.productId),
-                    { stock: product.stock }
-                );
-            }
-        }
-
-        // Обновляем продажу
-        await window.firebaseFunctions.updateDoc(
-            window.firebaseFunctions.doc(window.firebaseDb, 'sales', saleId),
+        await window.stockOperations.save('sales',
             {
                 items: currentSaleItems.map(item => ({
                     productId: item.productId,
@@ -957,20 +941,8 @@ window.updateSale = async function(saleId, btn) {
                 seller: sellerInput,
                 date: new Date(dateInput).toISOString(),
                 excludeFromStats: excludeFromStats
-            }
+            }, oldSale, btn
         );
-
-        // Применяем новые остатки
-        for (const item of currentSaleItems) {
-            const product = products.find(p => p.id === item.productId);
-            if (product) {
-                product.stock -= item.quantity;
-                await window.firebaseFunctions.updateDoc(
-                    window.firebaseFunctions.doc(window.firebaseDb, 'products', item.productId),
-                    { stock: product.stock }
-                );
-            }
-        }
 
         closeModal();
         currentSaleItems = [];
@@ -979,7 +951,7 @@ window.updateSale = async function(saleId, btn) {
         await loadProducts();
         updateDashboard();
     } catch (error) {
-        showError('Ошибка при обновлении продажи');
+        showError(stockErrorMessage(error, 'Ошибка при обновлении продажи'));
         console.error(error);
         btn.disabled = false;
         btn.textContent = 'Сохранить изменения';
@@ -987,6 +959,7 @@ window.updateSale = async function(saleId, btn) {
 };
 
 window.deleteSale = async function(saleId, btn) {
+    if (btn.disabled) return;
     if (!confirm('Удалить эту продажу? Остатки товаров будут восстановлены.')) return;
 
     const sale = sales.find(s => s.id === saleId);
@@ -996,26 +969,13 @@ window.deleteSale = async function(saleId, btn) {
     btn.textContent = 'Удаление...';
 
     try {
-        for (const item of sale.items) {
-            const product = products.find(p => p.id === item.productId);
-            if (product) {
-                const newStock = product.stock + item.quantity;
-                await window.firebaseFunctions.updateDoc(
-                    window.firebaseFunctions.doc(window.firebaseDb, 'products', item.productId),
-                    { stock: newStock }
-                );
-            }
-        }
-
-        await window.firebaseFunctions.deleteDoc(
-            window.firebaseFunctions.doc(window.firebaseDb, 'sales', saleId)
-        );
+        await window.stockOperations.save('sales', null, sale, btn);
 
         await loadSales();
         await loadProducts();
         updateDashboard();
     } catch (error) {
-        showError('Ошибка при удалении продажи');
+        showError(stockErrorMessage(error, 'Ошибка при удалении продажи'));
         console.error(error);
         btn.disabled = false;
         btn.textContent = 'Удалить';
@@ -1154,6 +1114,7 @@ window.editIncome = async function(incomeId) {
     if (!incomeRecord) return;
     
     editingIncomeId = incomeId;
+    editingIncomeSnapshot = JSON.parse(JSON.stringify(incomeRecord));
     
     const product = products.find(p => p.id === incomeRecord.productId);
     const productName = product ? `${product.name} (${product.size || '–'})` : incomeRecord.productName;
@@ -1195,6 +1156,7 @@ window.editIncome = async function(incomeId) {
 };
 
 window.saveIncome = async function(btn) {
+    if (btn.disabled) return;
     const dateInput = document.getElementById('income-date').value;
     
     if (!dateInput) {
@@ -1204,7 +1166,12 @@ window.saveIncome = async function(btn) {
 
     const hiddenInput = document.getElementById('income-product-id');
     let productId = hiddenInput ? hiddenInput.value : '';
-    const quantity = parseInt(document.getElementById('income-quantity').value);
+    const quantity = Number(document.getElementById('income-quantity').value);
+    if (!Number.isSafeInteger(quantity) || quantity < 1) {
+        showError('Укажите целое количество больше нуля');
+        return;
+    }
+    let newProductData = null;
     
     if (productId === 'new') {
         const newName = document.getElementById('new-product-name').value.trim();
@@ -1226,36 +1193,20 @@ window.saveIncome = async function(btn) {
             updateBrandMapping(newBrand, newIsPermanentSupplier);
         }
         
-        btn.disabled = true;
-        btn.textContent = 'Сохранение...';
-        try {
-            const newArticle = generateArticle();
-            const docRef = await window.firebaseFunctions.addDoc(
-                window.firebaseFunctions.collection(window.firebaseDb, 'products'),
-                {
-                    article: newArticle,
-                    name: newName,
-                    category: newCategory,
-                    brand: newBrand,
-                    isPermanentSupplier: newIsPermanentSupplier,
-                    gender: newGender,
-                    size: newSize,
-                    cost: newCost,
-                    price: newPrice,
-                    discount: newDiscount,
-                    stock: 0,
-                    createdAt: new Date().toISOString()
-                }
-            );
-            productId = docRef.id;
-            await loadProducts();
-        } catch (error) {
-            showError('Ошибка при создании нового товара');
-            console.error(error);
-            btn.disabled = false;
-            btn.textContent = 'Сохранить поступление';
-            return;
-        }
+        newProductData = {
+            article: generateArticle(),
+            name: newName,
+            category: newCategory,
+            brand: newBrand,
+            isPermanentSupplier: newIsPermanentSupplier,
+            gender: newGender,
+            size: newSize,
+            cost: newCost,
+            price: newPrice,
+            discount: newDiscount,
+            stock: quantity,
+            createdAt: new Date().toISOString()
+        };
     }
     
     if (!productId) {
@@ -1263,11 +1214,11 @@ window.saveIncome = async function(btn) {
         return;
     }
     
-    const product = products.find(p => p.id === productId);
+    let product = newProductData || products.find(p => p.id === productId);
     if (!product) {
         await loadProducts();
-        const updatedProduct = products.find(p => p.id === productId);
-        if (!updatedProduct) {
+        product = products.find(p => p.id === productId);
+        if (!product) {
             showError('Товар не найден');
             return;
         }
@@ -1279,26 +1230,16 @@ window.saveIncome = async function(btn) {
     btn.textContent = 'Сохранение...';
 
     try {
-        await window.firebaseFunctions.addDoc(
-            window.firebaseFunctions.collection(window.firebaseDb, 'income'),
-            {
-                productId: productId,
-                productName: product ? `${product.name} (${product.size || '–'})` : 'Новый товар',
-                quantity: quantity,
-                cost: product ? product.cost : 0,
-                totalAmount: totalAmount,
-                date: new Date(dateInput).toISOString()
-            }
-        );
-
-        const currentProduct = products.find(p => p.id === productId);
-        if (currentProduct) {
-            const newStock = currentProduct.stock + quantity;
-            await window.firebaseFunctions.updateDoc(
-                window.firebaseFunctions.doc(window.firebaseDb, 'products', productId),
-                { stock: newStock }
-            );
-        }
+        const receipt = {
+            productId: productId,
+            productName: product ? `${product.name} (${product.size || '–'})` : 'Новый товар',
+            quantity: quantity,
+            cost: product ? product.cost : 0,
+            totalAmount: totalAmount,
+            date: new Date(dateInput).toISOString()
+        };
+        if (newProductData) await window.stockOperations.createProduct(newProductData, receipt, btn);
+        else await window.stockOperations.save('income', receipt, null, btn);
 
         closeModal();
         editingIncomeId = null;
@@ -1306,7 +1247,7 @@ window.saveIncome = async function(btn) {
         await loadProducts();
         updateDashboard();
     } catch (error) {
-        showError('Ошибка при сохранении поступления');
+        showError(stockErrorMessage(error, 'Ошибка при сохранении поступления'));
         console.error(error);
         btn.disabled = false;
         btn.textContent = 'Сохранить поступление';
@@ -1314,6 +1255,7 @@ window.saveIncome = async function(btn) {
 };
 
 window.updateIncome = async function(incomeId, btn) {
+    if (btn.disabled) return;
     const dateInput = document.getElementById('income-date').value;
     
     if (!dateInput) {
@@ -1323,9 +1265,9 @@ window.updateIncome = async function(incomeId, btn) {
 
     const hiddenInput = document.getElementById('income-product-id');
     const productId = hiddenInput ? hiddenInput.value : '';
-    const quantity = parseInt(document.getElementById('income-quantity').value);
+    const quantity = Number(document.getElementById('income-quantity').value);
     
-    const oldIncome = income.find(i => i.id === incomeId);
+    const oldIncome = editingIncomeSnapshot?.id === incomeId ? editingIncomeSnapshot : income.find(i => i.id === incomeId);
     if (!oldIncome) return;
 
     const product = products.find(p => p.id === productId);
@@ -1340,19 +1282,7 @@ window.updateIncome = async function(incomeId, btn) {
     btn.textContent = 'Сохранение...';
 
     try {
-        // Откатываем старое поступление
-        const oldProduct = products.find(p => p.id === oldIncome.productId);
-        if (oldProduct) {
-            const newStock = Math.max(0, oldProduct.stock - oldIncome.quantity);
-            await window.firebaseFunctions.updateDoc(
-                window.firebaseFunctions.doc(window.firebaseDb, 'products', oldIncome.productId),
-                { stock: newStock }
-            );
-        }
-
-        // Обновляем запись
-        await window.firebaseFunctions.updateDoc(
-            window.firebaseFunctions.doc(window.firebaseDb, 'income', incomeId),
+        await window.stockOperations.save('income',
             {
                 productId: productId,
                 productName: `${product.name} (${product.size || '–'})`,
@@ -1360,18 +1290,8 @@ window.updateIncome = async function(incomeId, btn) {
                 cost: product.cost,
                 totalAmount: totalAmount,
                 date: new Date(dateInput).toISOString()
-            }
+            }, oldIncome, btn
         );
-
-        // Применяем новое поступление
-        const updatedProduct = products.find(p => p.id === productId);
-        if (updatedProduct) {
-            const newStock = updatedProduct.stock + quantity;
-            await window.firebaseFunctions.updateDoc(
-                window.firebaseFunctions.doc(window.firebaseDb, 'products', productId),
-                { stock: newStock }
-            );
-        }
 
         closeModal();
         editingIncomeId = null;
@@ -1379,7 +1299,7 @@ window.updateIncome = async function(incomeId, btn) {
         await loadProducts();
         updateDashboard();
     } catch (error) {
-        showError('Ошибка при обновлении поступления');
+        showError(stockErrorMessage(error, 'Ошибка при обновлении поступления'));
         console.error(error);
         btn.disabled = false;
         btn.textContent = 'Сохранить изменения';
@@ -1387,6 +1307,7 @@ window.updateIncome = async function(incomeId, btn) {
 };
 
 window.deleteIncome = async function(incomeId, btn) {
+    if (btn.disabled) return;
     if (!confirm('Удалить это поступление? Остаток товара будет уменьшен.')) return;
     
     const incomeRecord = income.find(i => i.id === incomeId);
@@ -1396,24 +1317,13 @@ window.deleteIncome = async function(incomeId, btn) {
     btn.textContent = 'Удаление...';
 
     try {
-        await window.firebaseFunctions.deleteDoc(
-            window.firebaseFunctions.doc(window.firebaseDb, 'income', incomeId)
-        );
-
-        const product = products.find(p => p.id === incomeRecord.productId);
-        if (product) {
-            const newStock = Math.max(0, product.stock - incomeRecord.quantity);
-            await window.firebaseFunctions.updateDoc(
-                window.firebaseFunctions.doc(window.firebaseDb, 'products', incomeRecord.productId),
-                { stock: newStock }
-            );
-        }
+        await window.stockOperations.save('income', null, incomeRecord, btn);
 
         await loadIncome();
         await loadProducts();
         updateDashboard();
     } catch (error) {
-        showError('Ошибка при удалении поступления');
+        showError(stockErrorMessage(error, 'Ошибка при удалении поступления'));
         console.error(error);
         btn.disabled = false;
         btn.textContent = 'Удалить';
@@ -2046,8 +1956,9 @@ window.showQuickIncome = function(productId) {
 };
 
 window.saveQuickIncome = async function(productId, btn) {
+    if (btn.disabled) return;
     const dateInput = document.getElementById('quick-income-date').value;
-    const quantity = parseInt(document.getElementById('quick-income-quantity').value);
+    const quantity = Number(document.getElementById('quick-income-quantity').value);
     
     if (!dateInput) { showError('Укажите дату'); return; }
     if (!quantity || quantity < 1) { showError('Укажите количество'); return; }
@@ -2061,8 +1972,7 @@ window.saveQuickIncome = async function(productId, btn) {
     btn.textContent = 'Сохранение...';
     
     try {
-        await window.firebaseFunctions.addDoc(
-            window.firebaseFunctions.collection(window.firebaseDb, 'income'),
+        await window.stockOperations.save('income',
             {
                 productId: productId,
                 productName: `${product.name} (${product.size || '–'})`,
@@ -2070,13 +1980,7 @@ window.saveQuickIncome = async function(productId, btn) {
                 cost: product.cost || 0,
                 totalAmount: totalAmount,
                 date: new Date(dateInput).toISOString()
-            }
-        );
-        
-        const newStock = product.stock + quantity;
-        await window.firebaseFunctions.updateDoc(
-            window.firebaseFunctions.doc(window.firebaseDb, 'products', productId),
-            { stock: newStock }
+            }, null, btn
         );
         
         closeModal();
@@ -2084,7 +1988,7 @@ window.saveQuickIncome = async function(productId, btn) {
         await loadProducts();
         updateDashboard();
     } catch (error) {
-        showError('Ошибка при сохранении');
+        showError(stockErrorMessage(error, 'Ошибка при сохранении'));
         console.error(error);
         btn.disabled = false;
         btn.textContent = 'Сохранить приход';
@@ -2112,7 +2016,7 @@ window.showIncomeHistory = function(productId) {
                 </div>
                 <div style="display: flex; gap: 6px;">
                     <button class="ih-edit" onclick="editIncomeRecord('${r.id}', '${productId}')">Изменить</button>
-                    <button class="ih-delete" onclick="deleteIncomeRecord('${r.id}', '${productId}')">Удалить</button>
+                    <button class="ih-delete" onclick="deleteIncomeRecord('${r.id}', '${productId}', this)">Удалить</button>
                 </div>
             </div>
         `).join('') + '</div>';
@@ -2133,6 +2037,7 @@ window.showIncomeHistory = function(productId) {
 window.editIncomeRecord = function(incomeId, productId) {
     const record = income.find(i => i.id === incomeId);
     if (!record) return;
+    editingIncomeSnapshot = JSON.parse(JSON.stringify(record));
     
     const product = products.find(p => p.id === productId);
     if (!product) return;
@@ -2159,8 +2064,9 @@ window.editIncomeRecord = function(incomeId, productId) {
 };
 
 window.saveEditedIncomeRecord = async function(incomeId, productId, oldQuantity, btn) {
+    if (btn.disabled) return;
     const dateInput = document.getElementById('edit-income-date').value;
-    const newQuantity = parseInt(document.getElementById('edit-income-quantity').value);
+    const newQuantity = Number(document.getElementById('edit-income-quantity').value);
     
     if (!dateInput) {
         showError('Укажите дату');
@@ -2177,35 +2083,24 @@ window.saveEditedIncomeRecord = async function(incomeId, productId, oldQuantity,
         return;
     }
     
-    // Проверяем, что остаток не уйдёт в минус
-    const quantityDiff = newQuantity - oldQuantity;
-    const projectedStock = product.stock + quantityDiff;
+    const record = editingIncomeSnapshot?.id === incomeId ? editingIncomeSnapshot : income.find(i => i.id === incomeId);
+    if (!record) return;
     
-    if (projectedStock < 0) {
-        showError(`Нельзя уменьшить количество. Уже продано больше, чем можно изменить. Максимальное уменьшение: ${product.stock} шт.`);
-        return;
-    }
-    
-    const totalAmount = (product.cost || 0) * newQuantity;
+    const cost = record.cost ?? product.cost ?? 0;
+    const totalAmount = cost * newQuantity;
     
     btn.disabled = true;
     btn.textContent = 'Сохранение...';
     
     try {
-        // Обновляем запись
-        await window.firebaseFunctions.updateDoc(
-            window.firebaseFunctions.doc(window.firebaseDb, 'income', incomeId),
+        await window.stockOperations.save('income',
             {
+                ...record,
+                cost,
                 quantity: newQuantity,
                 totalAmount: totalAmount,
                 date: new Date(dateInput).toISOString()
-            }
-        );
-        
-        // Обновляем остаток товара
-        await window.firebaseFunctions.updateDoc(
-            window.firebaseFunctions.doc(window.firebaseDb, 'products', productId),
-            { stock: projectedStock }
+            }, record, btn
         );
         
         closeModal();
@@ -2214,40 +2109,32 @@ window.saveEditedIncomeRecord = async function(incomeId, productId, oldQuantity,
         updateDashboard();
         showIncomeHistory(productId);
     } catch (error) {
-        showError('Ошибка при сохранении');
+        showError(stockErrorMessage(error, 'Ошибка при сохранении'));
         console.error(error);
         btn.disabled = false;
         btn.textContent = 'Сохранить изменения';
     }
 };
 
-window.deleteIncomeRecord = async function(incomeId, productId) {
+window.deleteIncomeRecord = async function(incomeId, productId, btn) {
+    if (btn?.disabled) return;
     const record = income.find(i => i.id === incomeId);
     if (!record) return;
     
     if (!confirm(`Удалить приход от ${formatDate(record.date)} (${record.quantity} шт.)? Остаток будет уменьшен.`)) return;
+    if (btn) btn.disabled = true;
     
     try {
-        await window.firebaseFunctions.deleteDoc(
-            window.firebaseFunctions.doc(window.firebaseDb, 'income', incomeId)
-        );
-        
-        const product = products.find(p => p.id === productId);
-        if (product) {
-            const newStock = Math.max(0, product.stock - record.quantity);
-            await window.firebaseFunctions.updateDoc(
-                window.firebaseFunctions.doc(window.firebaseDb, 'products', productId),
-                { stock: newStock }
-            );
-        }
+        await window.stockOperations.save('income', null, record, btn);
         
         await loadIncome();
         await loadProducts();
         updateDashboard();
         showIncomeHistory(productId);
     } catch (error) {
-        showError('Ошибка при удалении');
+        showError(stockErrorMessage(error, 'Ошибка при удалении'));
         console.error(error);
+        if (btn) btn.disabled = false;
     }
 };
 

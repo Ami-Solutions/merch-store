@@ -15,3 +15,6 @@ npm-debug.log*
 # Временные файлы
 *.swp
 *.tmp
+
+# Independent next-generation platform: never publish with this legacy site
+/merch-platform/
