@@ -18,3 +18,7 @@ npm-debug.log*
 
 # Independent next-generation platform: never publish with this legacy site
 /merch-platform/
+
+# Local legacy development and synthetic test artifacts
+/node_modules/
+/output/

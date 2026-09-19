@@ -21,6 +21,18 @@ let expandedABCGroups = { a: false, b: false, c: false };
 // Состояние раскрытия полного списка залежавшихся товаров
 let staleProductsExpanded = false;
 
+// Explicit item condition takes precedence over the legacy supplier-based classification.
+// Missing flags retain their old meaning until the individual product is saved.
+function isSecondhandProduct(product) {
+    return typeof product.isSecondhand === 'boolean'
+        ? product.isSecondhand
+        : !product.isPermanentSupplier;
+}
+
+function isReorderableProduct(product) {
+    return Boolean(product.isPermanentSupplier) && !isSecondhandProduct(product);
+}
+
 function getGenderLabel(gender) {
     const labels = { male: 'Мужское', female: 'Женское', unisex: 'Унисекс' };
     return labels[gender] || '–';
@@ -606,7 +618,7 @@ function renderABCAnalysis() {
     container.innerHTML = `
         <div class="abc-tabs">
             <div class="abc-tab ${currentABCType === 'all' ? 'active' : ''}" data-type="all" onclick="switchABCType('all')">Все товары</div>
-            <div class="abc-tab ${currentABCType === 'brand' ? 'active' : ''}" data-type="brand" onclick="switchABCType('brand')">Бренды</div>
+            <div class="abc-tab ${currentABCType === 'brand' ? 'active' : ''}" data-type="brand" onclick="switchABCType('brand')">Новые товары</div>
             <div class="abc-tab ${currentABCType === 'secondhand' ? 'active' : ''}" data-type="secondhand" onclick="switchABCType('secondhand')">Секонд-хенд</div>
         </div>
         <div class="abc-metric-tabs">
@@ -644,9 +656,9 @@ function renderABCContent(metric) {
     
     let filteredProducts = products;
     if (currentABCType === 'brand') {
-        filteredProducts = products.filter(p => p.isPermanentSupplier);
+        filteredProducts = products.filter(p => !isSecondhandProduct(p));
     } else if (currentABCType === 'secondhand') {
-        filteredProducts = products.filter(p => !p.isPermanentSupplier);
+        filteredProducts = products.filter(isSecondhandProduct);
     }
     
     const productData = {};
@@ -782,10 +794,10 @@ function renderSizeAnalysis() {
     const container = document.getElementById('size-analysis-container');
     if (!container) return;
     
-    const brandProducts = products.filter(p => p.isPermanentSupplier);
+    const brandProducts = products.filter(isReorderableProduct);
     
     if (brandProducts.length === 0) {
-        container.innerHTML = '<div class="analytics-empty">Нет брендовой одежды для анализа размерной сетки</div>';
+        container.innerHTML = '<div class="analytics-empty">Нет новых товаров постоянных поставщиков для анализа размерной сетки</div>';
         return;
     }
     
@@ -803,7 +815,7 @@ function renderSizeAnalysis() {
         if (s.items) {
             s.items.forEach(item => {
                 const product = products.find(p => p.id === item.productId);
-                if (product && product.isPermanentSupplier) {
+                if (product && isReorderableProduct(product)) {
                     const size = product.size || 'Без размера';
                     if (!sizeData[size]) sizeData[size] = { size, stock: 0, sold: 0, revenue: 0 };
                     sizeData[size].sold += item.quantity;
@@ -815,14 +827,14 @@ function renderSizeAnalysis() {
     
     const sizes = Object.values(sizeData).filter(s => s.stock > 0 || s.sold > 0);
     if (sizes.length === 0) {
-        container.innerHTML = '<div class="analytics-empty">Нет данных по размерам брендовой одежды</div>';
+        container.innerHTML = '<div class="analytics-empty">Нет данных по размерам новых товаров постоянных поставщиков</div>';
         return;
     }
     
     const avgSold = sizes.reduce((sum, s) => sum + s.sold, 0) / sizes.length;
     
     container.innerHTML = `
-        <div class="analytics-subtitle">Только брендовая одежда (можно дозаказать у поставщика)</div>
+        <div class="analytics-subtitle">Только новые товары постоянных поставщиков (можно дозаказать)</div>
         <div class="size-analysis-grid">
             ${sizes.map(s => {
                 let cls = '';
@@ -950,7 +962,7 @@ function renderBrandTurnover() {
     container.innerHTML = `
         <div class="turnover-tabs">
             <div class="turnover-tab ${currentTurnoverType === 'all' ? 'active' : ''}" data-type="all" onclick="switchTurnoverType('all')">Все</div>
-            <div class="turnover-tab ${currentTurnoverType === 'brand' ? 'active' : ''}" data-type="brand" onclick="switchTurnoverType('brand')">Бренды</div>
+            <div class="turnover-tab ${currentTurnoverType === 'brand' ? 'active' : ''}" data-type="brand" onclick="switchTurnoverType('brand')">Новые товары</div>
             <div class="turnover-tab ${currentTurnoverType === 'secondhand' ? 'active' : ''}" data-type="secondhand" onclick="switchTurnoverType('secondhand')">Секонд-хенд</div>
         </div>
         <div id="turnover-content"></div>
@@ -978,16 +990,16 @@ function renderTurnoverContent() {
     
     let filteredProducts = products;
     if (currentTurnoverType === 'brand') {
-        filteredProducts = products.filter(p => p.isPermanentSupplier);
+        filteredProducts = products.filter(p => !isSecondhandProduct(p));
     } else if (currentTurnoverType === 'secondhand') {
-        filteredProducts = products.filter(p => !p.isPermanentSupplier);
+        filteredProducts = products.filter(isSecondhandProduct);
     }
     
     const brandData = {};
     filteredProducts.forEach(p => {
         const brand = p.brand || 'Без бренда';
         if (!brandData[brand]) {
-            brandData[brand] = { brand, stock: 0, sold30: 0, revenue: 0, isPermanent: p.isPermanentSupplier };
+            brandData[brand] = { brand, stock: 0, sold30: 0, revenue: 0 };
         }
         brandData[brand].stock += (p.stock || 0);
     });
@@ -1000,12 +1012,12 @@ function renderTurnoverContent() {
                 const product = products.find(p => p.id === item.productId);
                 if (product) {
                     const matchesFilter = currentTurnoverType === 'all' || 
-                        (currentTurnoverType === 'brand' && product.isPermanentSupplier) ||
-                        (currentTurnoverType === 'secondhand' && !product.isPermanentSupplier);
+                        (currentTurnoverType === 'brand' && !isSecondhandProduct(product)) ||
+                        (currentTurnoverType === 'secondhand' && isSecondhandProduct(product));
                     
                     if (matchesFilter) {
                         const brand = product.brand || 'Без бренда';
-                        if (!brandData[brand]) brandData[brand] = { brand, stock: 0, sold30: 0, revenue: 0, isPermanent: product.isPermanentSupplier };
+                        if (!brandData[brand]) brandData[brand] = { brand, stock: 0, sold30: 0, revenue: 0 };
                         brandData[brand].sold30 += item.quantity;
                         brandData[brand].revenue += item.total;
                     }
@@ -1080,7 +1092,7 @@ function renderStaleProducts() {
     products.forEach(p => {
         if ((p.stock || 0) <= 0) return;
         
-        const thresholdDays = p.isPermanentSupplier ? 90 : 120;
+        const thresholdDays = isSecondhandProduct(p) ? 120 : 90;
         const threshold = new Date(now.getTime() - thresholdDays * 86400000);
         
         // Находим дату первого поступления этого товара
@@ -1118,7 +1130,7 @@ function renderStaleProducts() {
                 lastSaleDate,
                 daysWithoutSales,
                 frozenMoney,
-                isBrand: p.isPermanentSupplier,
+                isNew: !isSecondhandProduct(p),
                 thresholdDays
             });
         }
@@ -1126,8 +1138,8 @@ function renderStaleProducts() {
     
     staleItems.sort((a, b) => b.frozenMoney - a.frozenMoney);
     
-    const brandStale = staleItems.filter(i => i.isBrand);
-    const secondhandStale = staleItems.filter(i => !i.isBrand);
+    const brandStale = staleItems.filter(i => i.isNew);
+    const secondhandStale = staleItems.filter(i => !i.isNew);
     const totalFrozen = staleItems.reduce((sum, i) => sum + i.frozenMoney, 0);
     
     if (staleItems.length === 0) {
@@ -1135,7 +1147,7 @@ function renderStaleProducts() {
             <div class="analytics-empty">
                 🎉 Отлично! Нет товаров без продаж сверх порога
                 <div style="margin-top: 12px; font-size: 12px; color: var(--text-secondary);">
-                    Пороги: Бренды – 90 дней, Секонд-хенд – 120 дней
+                    Пороги: Новые товары – 90 дней, Секонд-хенд – 120 дней
                 </div>
             </div>
         `;
@@ -1151,12 +1163,12 @@ function renderStaleProducts() {
             но без продаж сверх порога. Общая стоимость замороженных денег: 
             <strong>${formatCurrency(totalFrozen)}</strong>
             <div style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">
-                Пороги: Бренды – 90 дней, Секонд-хенд – 120 дней
+                Пороги: Новые товары – 90 дней, Секонд-хенд – 120 дней
             </div>
         </div>
         <div class="stale-summary" style="display: flex; gap: 16px; flex-wrap: wrap;">
             <div style="flex: 1; min-width: 200px;">
-                <strong>Бренды (90+ дн.):</strong> ${brandStale.length} шт., 
+                <strong>Новые товары (90+ дн.):</strong> ${brandStale.length} шт.,
                 заморожено <strong>${formatCurrency(brandStale.reduce((s, i) => s + i.frozenMoney, 0))}</strong>
             </div>
             <div style="flex: 1; min-width: 200px;">
@@ -1169,8 +1181,8 @@ function renderStaleProducts() {
                 <div class="stale-item">
                     <div class="stale-name" title="${i.product.name} ${i.product.size ? '(' + i.product.size + ')' : ''}">
                         ${i.product.name} ${i.product.size ? '(' + i.product.size + ')' : ''}
-                        <span style="font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 6px; background: ${i.isBrand ? 'var(--success)' : 'var(--warning)'}; color: white;">
-                            ${i.isBrand ? 'Бренд' : 'Секонд'}
+                        <span style="font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 6px; background: ${i.isNew ? 'var(--success)' : 'var(--warning)'}; color: white;">
+                            ${i.isNew ? 'Новый' : 'Секонд'}
                         </span>
                     </div>
                     <div class="stale-info">
@@ -1210,7 +1222,7 @@ function renderMarginByType() {
             const cost = product.cost || 0;
             const profit = (item.price - cost) * item.quantity;
             
-            if (product.isPermanentSupplier) {
+            if (!isSecondhandProduct(product)) {
                 brandStats.revenue += item.total;
                 brandStats.profit += profit;
                 brandStats.count += item.quantity;
@@ -1230,7 +1242,7 @@ function renderMarginByType() {
     container.innerHTML = `
         <div class="margin-grid">
             <div class="margin-card brand">
-                <div class="margin-type-badge">Брендовая одежда</div>
+                <div class="margin-type-badge">Новые товары</div>
                 <div class="margin-stats">
                     <div class="margin-stat">
                         <div class="margin-stat-value ${brandMargin >= 30 ? 'success' : 'warning'}">${brandMargin.toFixed(1)}%</div>
@@ -1274,7 +1286,7 @@ function renderMarginByType() {
         </div>
         <div class="analytics-summary" style="margin-top: 16px; padding: 12px 16px; background: var(--bg-tertiary); border-radius: 8px; font-size: 13px;">
             ${brandMargin > secondhandMargin 
-                ? `<strong>Бренды</strong> эффективнее по марже (${brandMargin.toFixed(1)}% vs ${secondhandMargin.toFixed(1)}%)`
+                ? `<strong>Новые товары</strong> эффективнее по марже (${brandMargin.toFixed(1)}% vs ${secondhandMargin.toFixed(1)}%)`
                 : `<strong>Секонд-хенд</strong> эффективнее по марже (${secondhandMargin.toFixed(1)}% vs ${brandMargin.toFixed(1)}%)`}
         </div>
     `;
@@ -1292,7 +1304,7 @@ function renderMarkupCoefficient() {
         if (!p.cost || p.cost <= 0 || !p.price || p.price <= 0) return;
         const markup = p.price / p.cost;
         
-        if (p.isPermanentSupplier) {
+        if (!isSecondhandProduct(p)) {
             brandMarkups.push(markup);
         } else {
             secondhandMarkups.push(markup);
@@ -1309,7 +1321,7 @@ function renderMarkupCoefficient() {
     container.innerHTML = `
         <div class="markup-grid">
             <div class="markup-card brand">
-                <div class="markup-type-badge">Брендовая одежда</div>
+                <div class="markup-type-badge">Новые товары</div>
                 <div class="markup-value">${avgBrandMarkup.toFixed(2)}x</div>
                 <div class="markup-description">Средний коэффициент наценки</div>
                 <div class="markup-example">
@@ -1328,9 +1340,11 @@ function renderMarkupCoefficient() {
             </div>
         </div>
         <div class="analytics-summary" style="margin-top: 16px; padding: 12px 16px; background: var(--bg-tertiary); border-radius: 8px; font-size: 13px;">
-            ${avgSecondhandMarkup > avgBrandMarkup 
-                ? `Секонд-хенд имеет наценку в <strong>${(avgSecondhandMarkup / avgBrandMarkup).toFixed(1)}x</strong> выше, чем бренды`
-                : `Бренды имеют наценку в <strong>${(avgBrandMarkup / avgSecondhandMarkup).toFixed(1)}x</strong> выше, чем секонд-хенд`}
+            ${avgBrandMarkup > 0 && avgSecondhandMarkup > 0
+                ? (avgSecondhandMarkup > avgBrandMarkup
+                    ? `Секонд-хенд имеет наценку в <strong>${(avgSecondhandMarkup / avgBrandMarkup).toFixed(1)}x</strong> выше, чем новые товары`
+                    : `Новые товары имеют наценку в <strong>${(avgBrandMarkup / avgSecondhandMarkup).toFixed(1)}x</strong> выше, чем секонд-хенд`)
+                : 'Недостаточно данных для сравнения наценки'}
         </div>
     `;
 }
@@ -1352,7 +1366,7 @@ function renderSoldPercentage() {
         const product = products.find(p => p.id === inc.productId);
         if (!product) return;
         
-        if (product.isPermanentSupplier) {
+        if (!isSecondhandProduct(product)) {
             brandStats.received += inc.quantity;
         } else {
             secondhandStats.received += inc.quantity;
@@ -1368,7 +1382,7 @@ function renderSoldPercentage() {
             const product = products.find(p => p.id === item.productId);
             if (!product) return;
             
-            if (product.isPermanentSupplier) {
+            if (!isSecondhandProduct(product)) {
                 brandStats.sold += item.quantity;
             } else {
                 secondhandStats.sold += item.quantity;
@@ -1383,7 +1397,7 @@ function renderSoldPercentage() {
         <div class="analytics-subtitle">За последние 6 месяцев: сколько из поступивших вещей продалось</div>
         <div class="sold-percent-grid">
             <div class="sold-percent-card brand">
-                <div class="sold-percent-type">Брендовая одежда</div>
+                <div class="sold-percent-type">Новые товары</div>
                 <div class="sold-percent-value">${brandPercent.toFixed(1)}%</div>
                 <div class="sold-percent-bar">
                     <div class="sold-percent-fill" style="width: ${Math.min(brandPercent, 100)}%;"></div>
@@ -1406,8 +1420,8 @@ function renderSoldPercentage() {
             </div>
         </div>
         <div class="analytics-summary" style="margin-top: 16px; padding: 12px 16px; background: var(--bg-tertiary); border-radius: 8px; font-size: 13px;">
-            Норма для брендов: 60-70%, для секонда: 70-80%. 
-            ${brandPercent < 60 ? '<br><strong style="color: var(--warning);">⚠️ Бренды ниже нормы – проверьте цены или ассортимент</strong>' : ''}
+            Норма для новых товаров: 60-70%, для секонда: 70-80%.
+            ${brandPercent < 60 ? '<br><strong style="color: var(--warning);">⚠️ Новые товары ниже нормы – проверьте цены или ассортимент</strong>' : ''}
             ${secondhandPercent < 70 ? '<br><strong style="color: var(--warning);">⚠️ Секонд ниже нормы – проверьте качество или цены</strong>' : ''}
         </div>
         <div style="margin-top: 12px; padding: 12px 16px; background: var(--bg-tertiary); border-radius: 8px; font-size: 12px; color: var(--text-secondary); border-left: 3px solid var(--accent);">

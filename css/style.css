@@ -2032,3 +2032,12 @@ tr:hover { background: var(--bg-tertiary); }
     border-color: var(--accent);
     color: white;
 }
+/* Independent item condition beside the supplier setting */
+.product-condition-field { margin: -8px 0 16px; }
+.product-condition-field .product-condition-label { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
+.product-condition-label input[type="checkbox"] { flex: 0 0 auto; width: auto; margin: 4px 0 0; cursor: pointer; }
+.abc-tabs, .turnover-tabs { flex-wrap: wrap; }
+.chart-card { min-width: 0; }
+@media (max-width: 480px) {
+    .chart-header { flex-wrap: wrap; gap: 12px; }
+}

@@ -116,6 +116,17 @@ function isBrandPermanent(brand) {
     return mapping[brand.trim()] || false;
 }
 
+function secondhandFieldHTML(id, checked = false) {
+    return `
+        <div class="product-condition-field">
+            <label class="product-condition-label" for="${id}">
+                <input type="checkbox" id="${id}" ${checked ? 'checked' : ''}>
+                <span>Этот товар – б/у (секонд) <span class="tooltip-trigger" data-tooltip="secondhand-product">?</span></span>
+            </label>
+        </div>
+    `;
+}
+
 // === ЗАГРУЗКА ПОЛЬЗОВАТЕЛЕЙ (для планов) ===
 async function loadAllUsers() {
     try {
@@ -224,6 +235,7 @@ document.getElementById('add-product-btn').addEventListener('click', () => {
                 <span>Этот бренд – постоянный поставщик <span class="tooltip-trigger" data-tooltip="permanent-supplier">?</span></span>
             </label>
         </div>
+        ${secondhandFieldHTML('product-secondhand')}
         
         <label>Пол</label>
         <select id="product-gender">
@@ -336,6 +348,7 @@ window.editProduct = function(productId) {
                 <span>Этот бренд – постоянный поставщик <span class="tooltip-trigger" data-tooltip="permanent-supplier">?</span></span>
             </label>
         </div>
+        ${secondhandFieldHTML('product-secondhand', isSecondhandProduct(product))}
         
         <label>Пол</label>
         <select id="product-gender">
@@ -405,6 +418,7 @@ window.saveProduct = async function(btn) {
     const category = document.getElementById('product-category').value.trim();
     const brand = document.getElementById('product-brand').value.trim();
     const isPermanentSupplier = document.getElementById('product-permanent-supplier').checked;
+    const isSecondhand = document.getElementById('product-secondhand').checked;
     const gender = document.getElementById('product-gender').value || '';
     const size = document.getElementById('product-size').value.trim();
     const cost = parseFloat(document.getElementById('product-cost').value) || 0;
@@ -446,7 +460,7 @@ window.saveProduct = async function(btn) {
     try {
         await window.stockOperations.createProduct(
             {
-                article, name, category, brand, isPermanentSupplier, gender, size, cost, price, discount,
+                article, name, category, brand, isPermanentSupplier, isSecondhand, gender, size, cost, price, discount,
                 stock: initialQuantity,
                 createdAt: new Date().toISOString()
             },
@@ -481,6 +495,7 @@ window.updateProduct = async function(productId, btn) {
     const category = document.getElementById('product-category').value.trim();
     const brand = document.getElementById('product-brand').value.trim();
     const isPermanentSupplier = document.getElementById('product-permanent-supplier').checked;
+    const isSecondhand = document.getElementById('product-secondhand').checked;
     const gender = document.getElementById('product-gender').value || '';
     const size = document.getElementById('product-size').value.trim();
     const cost = parseFloat(document.getElementById('product-cost').value) || 0;
@@ -498,7 +513,7 @@ window.updateProduct = async function(productId, btn) {
     try {
         await window.firebaseFunctions.updateDoc(
             window.firebaseFunctions.doc(window.firebaseDb, 'products', productId),
-            { name, category, brand, isPermanentSupplier, gender, size, cost, price, discount }
+            { name, category, brand, isPermanentSupplier, isSecondhand, gender, size, cost, price, discount }
         );
         closeModal();
         await loadProducts();
@@ -1020,6 +1035,7 @@ document.getElementById('add-income-btn').addEventListener('click', () => {
         <input type="hidden" id="income-product-id">
         <div id="income-product-dropdown" class="product-dropdown"></div>
         
+        <button type="button" class="btn-small" onclick="showNewIncomeProduct()">+ Новый товар</button>
         <div id="income-quantity-wrapper" style="display: none;">
             <label>Количество</label>
             <input type="number" id="income-quantity" min="1" value="1" required>
@@ -1040,6 +1056,7 @@ document.getElementById('add-income-btn').addEventListener('click', () => {
                     <span>Этот бренд – постоянный поставщик <span class="tooltip-trigger" data-tooltip="permanent-supplier">?</span></span>
                 </label>
             </div>
+            ${secondhandFieldHTML('new-product-secondhand')}
             <label>Пол</label>
             <select id="new-product-gender">
                 <option value="">Не указан</option>
@@ -1064,8 +1081,8 @@ document.getElementById('add-income-btn').addEventListener('click', () => {
     // Инициализируем tooltip
     initTooltips();
     
-    // Обработчик для галочки постоянного поставщика в форме нового товара
-    setTimeout(() => {
+    // openModal уже вставил поля: обработчик должен работать и при быстром вводе.
+    {
         const newBrandInput = document.getElementById('new-product-brand');
         const newCheckboxWrapper = document.getElementById('new-permanent-supplier-wrapper');
         const newCheckbox = document.getElementById('new-product-permanent-supplier');
@@ -1089,7 +1106,7 @@ document.getElementById('add-income-btn').addEventListener('click', () => {
                 }
             });
         }
-    }, 100);
+    }
     
     // Инициализируем поиск товаров
     initProductSearch('income-product-search', 'income-product-id', 'income-product-dropdown', (productId) => {
@@ -1108,6 +1125,15 @@ document.getElementById('add-income-btn').addEventListener('click', () => {
         }
     });
 });
+
+window.showNewIncomeProduct = function() {
+    document.getElementById('income-product-id').value = 'new';
+    document.getElementById('income-product-search').value = '';
+    document.getElementById('income-product-dropdown').style.display = 'none';
+    document.getElementById('income-quantity-wrapper').style.display = 'block';
+    document.getElementById('new-product-form').style.display = 'block';
+    document.getElementById('new-product-name').focus();
+};
 
 window.editIncome = async function(incomeId) {
     const incomeRecord = income.find(i => i.id === incomeId);
@@ -1182,6 +1208,7 @@ window.saveIncome = async function(btn) {
         const newCategory = document.getElementById('new-product-category').value.trim();
         const newBrand = document.getElementById('new-product-brand').value.trim();
         const newIsPermanentSupplier = document.getElementById('new-product-permanent-supplier')?.checked || false;
+        const newIsSecondhand = document.getElementById('new-product-secondhand').checked;
         const newGender = document.getElementById('new-product-gender').value || '';
         const newSize = document.getElementById('new-product-size').value.trim();
         const newCost = parseFloat(document.getElementById('new-product-cost').value) || 0;
@@ -1199,6 +1226,7 @@ window.saveIncome = async function(btn) {
             category: newCategory,
             brand: newBrand,
             isPermanentSupplier: newIsPermanentSupplier,
+            isSecondhand: newIsSecondhand,
             gender: newGender,
             size: newSize,
             cost: newCost,
