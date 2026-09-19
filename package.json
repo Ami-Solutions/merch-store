@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node tools/serve.mjs",
     "test": "node tools/check.mjs",
-    "test:unit": "node --test tests/condition.test.mjs"
+    "test:unit": "node --test tests/condition.test.mjs",
+    "test:filters": "node tests/product-filters.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

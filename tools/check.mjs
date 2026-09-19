@@ -21,6 +21,7 @@ function run(cmd, args) {
 let started = false;
 try {
   await run(process.execPath, ["--test", "tests/condition.test.mjs"]);
+  await run(process.execPath, ["tests/product-filters.mjs"]);
   await mkdir(new URL("output/", root), { recursive: true });
   const jar = new URL("output/firestore.jar", root);
   const expected =

@@ -20,6 +20,8 @@ let productFilters = {
     gender: '',
     brand: '',
     size: '',
+    condition: '',
+    supplier: '',
     priceMin: 0,
     priceMax: 1000000
 };
@@ -1625,6 +1627,8 @@ function getFilteredProducts() {
         if (productFilters.gender && p.gender !== productFilters.gender) return false;
         if (productFilters.brand && !p.brand.toLowerCase().includes(productFilters.brand.toLowerCase())) return false;
         if (productFilters.size && !p.size.toLowerCase().includes(productFilters.size.toLowerCase())) return false;
+        if (productFilters.condition && isSecondhandProduct(p) !== (productFilters.condition === 'secondhand')) return false;
+        if (productFilters.supplier && Boolean(p.isPermanentSupplier) !== (productFilters.supplier === 'permanent')) return false;
         if ((p.price || 0) < productFilters.priceMin || (p.price || 0) > productFilters.priceMax) return false;
         return true;
     });
@@ -1753,6 +1757,16 @@ document.getElementById('product-size-filter')?.addEventListener('input', (e) =>
     renderProducts();
 });
 
+document.getElementById('product-condition-filter')?.addEventListener('change', (e) => {
+    productFilters.condition = e.target.value;
+    renderProducts();
+});
+
+document.getElementById('product-supplier-filter')?.addEventListener('change', (e) => {
+    productFilters.supplier = e.target.value;
+    renderProducts();
+});
+
 document.getElementById('product-price-min')?.addEventListener('input', (e) => {
     productFilters.priceMin = parseInt(e.target.value);
     const max = parseInt(document.getElementById('product-price-max').value);
@@ -1778,12 +1792,14 @@ document.getElementById('product-price-max')?.addEventListener('input', (e) => {
 });
 
 window.resetProductFilters = function() {
-    productFilters = { search: '', category: '', gender: '', brand: '', size: '', priceMin: 0, priceMax: 1000000 };
+    productFilters = { search: '', category: '', gender: '', brand: '', size: '', condition: '', supplier: '', priceMin: 0, priceMax: 1000000 };
     document.getElementById('product-search').value = '';
     document.getElementById('product-category-filter').value = '';
     document.getElementById('product-gender-filter').value = '';
     document.getElementById('product-brand-filter').value = '';
     document.getElementById('product-size-filter').value = '';
+    document.getElementById('product-condition-filter').value = '';
+    document.getElementById('product-supplier-filter').value = '';
     document.getElementById('product-price-min').value = 0;
     document.getElementById('product-price-max').value = 1000000;
     document.getElementById('product-price-range-label').textContent = '0 - 1000000 ₽';

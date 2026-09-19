@@ -341,6 +341,22 @@
                         <input type="text" id="product-size-filter" list="size-filter-list" placeholder="Все размеры" class="filter-input">
                         <datalist id="size-filter-list"></datalist>
                     </div>
+                    <div class="filter-group">
+                        <label for="product-condition-filter">Состояние товара</label>
+                        <select id="product-condition-filter" class="filter-select">
+                            <option value="">Все товары</option>
+                            <option value="new">Новые</option>
+                            <option value="secondhand">Б/у (секонд)</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="product-supplier-filter">Поставщик</label>
+                        <select id="product-supplier-filter" class="filter-select">
+                            <option value="">Все поставщики</option>
+                            <option value="permanent">Постоянные</option>
+                            <option value="other">Непостоянные</option>
+                        </select>
+                    </div>
                     <div class="filter-group filter-group-wide">
                         <label>Цена продажи: <span id="product-price-range-label">0 - 1000000 ₽</span></label>
                         <div class="range-slider">
@@ -624,7 +640,7 @@
 
     <script src="js/auth.js"></script>
     <script src="js/stock-operations.js?v=20260916"></script>
-    <script src="js/database.js?v=20260919"></script>
+    <script src="js/database.js?v=20260919-filters"></script>
     <script src="js/ui.js?v=20260919"></script>
     <script src="js/app.js?v=20260919"></script>
 </body>
