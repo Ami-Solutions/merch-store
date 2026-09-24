@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "start": "node tools/serve.mjs",
+    "start:demo": "node tools/archive-demo.mjs",
     "test": "node tools/check.mjs",
-    "test:unit": "node --test tests/condition.test.mjs",
+    "test:unit": "node --test tests/condition.test.mjs tests/lifecycle.test.mjs",
+    "test:archive": "node tests/archive-browser.mjs",
     "test:filters": "node tests/product-filters.mjs"
   },
   "devDependencies": {

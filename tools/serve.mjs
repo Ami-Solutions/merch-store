@@ -3,7 +3,7 @@ import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 export const root = new URL("../", import.meta.url);
-export async function startServer({ port = 8080, html } = {}) {
+export async function startServer({ port = 8080, html, assets = {} } = {}) {
   const server = createServer(async (req, res) => {
     try {
       const name = decodeURIComponent(
@@ -12,6 +12,10 @@ export async function startServer({ port = 8080, html } = {}) {
       if (!["GET", "HEAD"].includes(req.method)) {
         res.writeHead(405);
         return res.end();
+      }
+      if (Object.hasOwn(assets, name)) {
+        res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
+        return res.end(req.method === 'HEAD' ? undefined : assets[name]);
       }
       if (
         name !== "/" &&

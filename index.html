@@ -192,7 +192,7 @@
                         <p class="stat-value-small" id="last-income">–</p>
                     </div>
                     <div class="stat-card">
-                        <h3>Всего позиций</h3>
+                        <h3>Активных позиций</h3>
                         <p class="stat-value" id="total-products">0</p>
                     </div>
                 </div>
@@ -364,8 +364,10 @@
                             <input type="range" id="product-price-max" min="0" max="1000000" value="1000000" step="100">
                         </div>
                     </div>
+                    <label class="archive-toggle"><input type="checkbox" id="product-show-deleted"> Показать удалённые <span class="tooltip-trigger" data-tooltip="deleted-products">?</span></label>
                     <button class="btn-secondary btn-reset-filters" onclick="resetProductFilters()">Сбросить</button>
                 </div>
+                <p id="archive-status" class="archive-status" role="status" hidden></p>
                 <div class="table-container">
                     <table id="products-table">
                         <thead>
@@ -596,7 +598,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-analytics.js";
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, runTransaction } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, getDocs, getDocsFromServer, getDocFromServer, doc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, runTransaction, serverTimestamp, Timestamp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAR0Fbs8d6zGcK3WiWB6VD8WCxs3OhfuPY",
@@ -627,6 +629,7 @@
             collection,
             addDoc,
             getDocs,
+            getDocsFromServer,
             doc,
             updateDoc,
             deleteDoc,
@@ -634,14 +637,16 @@
             where,
             orderBy,
             onSnapshot,
-            runTransaction
+            runTransaction, getDocFromServer, serverTimestamp, Timestamp
         };
     </script>
 
-    <script src="js/auth.js"></script>
-    <script src="js/stock-operations.js?v=20260916"></script>
-    <script src="js/database.js?v=20260919-filters"></script>
-    <script src="js/ui.js?v=20260919"></script>
-    <script src="js/app.js?v=20260919"></script>
+    <script src="js/auth.js?v=20260924"></script>
+    <script src="js/product-lifecycle.js?v=20260924"></script>
+    <script src="js/archive-operations.js?v=20260924"></script>
+    <script src="js/stock-operations.js?v=20260924"></script>
+    <script src="js/database.js?v=20260924"></script>
+    <script src="js/ui.js?v=20260924"></script>
+    <script src="js/app.js?v=20260924"></script>
 </body>
 </html>

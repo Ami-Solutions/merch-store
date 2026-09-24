@@ -22,6 +22,7 @@ let productFilters = {
     size: '',
     condition: '',
     supplier: '',
+    showDeleted: false,
     priceMin: 0,
     priceMax: 1000000
 };
@@ -73,7 +74,7 @@ function smartSearch(text, query) {
 
 // === УТИЛИТЫ ДЛЯ ПОЛУЧЕНИЯ СУЩЕСТВУЮЩИХ ЗНАЧЕНИЙ ===
 function getUniqueValues(field) {
-    const values = [...new Set(products.map(p => p[field]).filter(v => v && v.trim()))];
+    const values = [...new Set(products.filter(p => isProductVisible(p)).map(p => p[field]).filter(v => v && v.trim()))];
     return values.sort();
 }
 
@@ -131,9 +132,11 @@ function secondhandFieldHTML(id, checked = false) {
 
 // === ЗАГРУЗКА ПОЛЬЗОВАТЕЛЕЙ (для планов) ===
 async function loadAllUsers() {
+    const generation = window.authGeneration || 0;
     try {
         const usersRef = window.firebaseFunctions.collection(window.firebaseDb, 'users');
         const querySnapshot = await window.firebaseFunctions.getDocs(usersRef);
+        if (generation !== (window.authGeneration || 0)) return;
         allUsers = [];
         querySnapshot.forEach((doc) => {
             allUsers.push({ id: doc.id, ...doc.data() });
@@ -182,10 +185,7 @@ window.trimAllProducts = async function(btn) {
             }
             
             if (needsUpdate) {
-                await window.firebaseFunctions.updateDoc(
-                    window.firebaseFunctions.doc(window.firebaseDb, 'products', product.id),
-                    updates
-                );
+                await window.archiveOperations.updateProduct(product.id, updates);
                 updated++;
             }
         }
@@ -204,8 +204,10 @@ window.trimAllProducts = async function(btn) {
 
 // === ТОВАРЫ ===
 async function loadProducts() {
+    const generation = window.authGeneration || 0;
     const productsRef = window.firebaseFunctions.collection(window.firebaseDb, 'products');
-    const querySnapshot = await window.firebaseFunctions.getDocs(productsRef);
+    const querySnapshot = await window.firebaseFunctions.getDocsFromServer(productsRef);
+    if (generation !== (window.authGeneration || 0)) return;
     
     products = [];
     querySnapshot.forEach((doc) => {
@@ -513,10 +515,8 @@ window.updateProduct = async function(productId, btn) {
     btn.disabled = true;
     btn.textContent = 'Сохранение...';
     try {
-        await window.firebaseFunctions.updateDoc(
-            window.firebaseFunctions.doc(window.firebaseDb, 'products', productId),
-            { name, category, brand, isPermanentSupplier, isSecondhand, gender, size, cost, price, discount }
-        );
+        await window.archiveOperations.updateProduct(productId,
+            { name, category, brand, isPermanentSupplier, isSecondhand, gender, size, cost, price, discount });
         closeModal();
         await loadProducts();
         updateDashboard();
@@ -533,33 +533,47 @@ function generateArticle() {
 }
 
 window.deleteProduct = async function(productId, btn) {
-    if (!confirm('Удалить этот товар?')) return;
+    if (!confirm('Отметить товар удалённым? Он исчезнет из каталога. Остаток сохранится в карточке, продажи и поступления останутся в истории. В течение двух лет товар можно восстановить')) return;
 
     btn.disabled = true;
     btn.textContent = 'Удаление...';
 
     try {
-        await window.firebaseFunctions.deleteDoc(
-            window.firebaseFunctions.doc(window.firebaseDb, 'products', productId)
-        );
+        await window.archiveOperations.changeStatus(productId);
         await loadProducts();
+        updateDashboard();
     } catch (error) {
-        showError('Ошибка при удалении');
+        showError(stockErrorMessage(error, 'Ошибка при удалении'));
         btn.disabled = false;
         btn.textContent = 'Удалить';
     }
 };
 
 // === ПРОДАЖИ ===
+window.restoreProduct = async function(productId, btn) {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    try {
+        await window.archiveOperations.changeStatus(productId, true);
+        await loadProducts();
+        updateDashboard();
+    } catch (error) { showError(stockErrorMessage(error, 'Не удалось восстановить товар')); }
+    finally { btn.disabled = false; }
+};
+
 async function loadSales() {
+    const generation = window.authGeneration || 0;
     const salesRef = window.firebaseFunctions.collection(window.firebaseDb, 'sales');
-    const q = window.firebaseFunctions.query(salesRef, window.firebaseFunctions.orderBy('date', 'desc'));
-    const querySnapshot = await window.firebaseFunctions.getDocs(q);
+    // orderBy omits rows without a date. Maintenance must see those rows too,
+    // so that incomplete history is reported instead of silently archived.
+    const querySnapshot = await window.firebaseFunctions.getDocsFromServer(salesRef);
+    if (generation !== (window.authGeneration || 0)) return;
     
     sales = [];
     querySnapshot.forEach((doc) => {
         sales.push({ id: doc.id, ...doc.data() });
     });
+    sales.sort((a, b) => (new Date(b.date).getTime() || 0) - (new Date(a.date).getTime() || 0));
     
     renderSales();
     updateSalesFilters();
@@ -1001,14 +1015,16 @@ window.deleteSale = async function(saleId, btn) {
 
 // === ПОСТУПЛЕНИЯ ===
 async function loadIncome() {
+    const generation = window.authGeneration || 0;
     const incomeRef = window.firebaseFunctions.collection(window.firebaseDb, 'income');
-    const q = window.firebaseFunctions.query(incomeRef, window.firebaseFunctions.orderBy('date', 'desc'));
-    const querySnapshot = await window.firebaseFunctions.getDocs(q);
+    const querySnapshot = await window.firebaseFunctions.getDocsFromServer(incomeRef);
+    if (generation !== (window.authGeneration || 0)) return;
     
     income = [];
     querySnapshot.forEach((doc) => {
         income.push({ id: doc.id, ...doc.data() });
     });
+    income.sort((a, b) => (new Date(b.date).getTime() || 0) - (new Date(a.date).getTime() || 0));
     
     renderIncome();
     updateIncomeFilters();
@@ -1362,11 +1378,13 @@ window.deleteIncome = async function(incomeId, btn) {
 
 // === ПЛАНЫ ===
 async function loadPlans() {
+    const generation = window.authGeneration || 0;
     await loadAllUsers(); // Загружаем пользователей для выпадающего списка
     
     const plansRef = window.firebaseFunctions.collection(window.firebaseDb, 'plans');
     const q = window.firebaseFunctions.query(plansRef, window.firebaseFunctions.orderBy('createdAt', 'desc'));
     const querySnapshot = await window.firebaseFunctions.getDocs(q);
+    if (generation !== (window.authGeneration || 0)) return;
     
     plans = [];
     querySnapshot.forEach((doc) => {
@@ -1518,9 +1536,10 @@ window.deletePlan = async function(planId, btn) {
 
 // === ФИЛЬТРЫ ===
 function updateProductFilters() {
-    const categories = [...new Set(products.map(p => p.category).filter(c => c))];
-    const brands = [...new Set(products.map(p => p.brand).filter(b => b))];
-    const sizes = [...new Set(products.map(p => p.size).filter(s => s))];
+    const visibleProducts = products.filter(p => isProductVisible(p, productFilters.showDeleted));
+    const categories = [...new Set(visibleProducts.map(p => p.category).filter(c => c))];
+    const brands = [...new Set(visibleProducts.map(p => p.brand).filter(b => b))];
+    const sizes = [...new Set(visibleProducts.map(p => p.size).filter(s => s))];
 
     const categoryList = document.getElementById('category-filter-list');
     const brandList = document.getElementById('brand-filter-list');
@@ -1552,7 +1571,7 @@ function updateIncomeFilters() {
     let maxSale = 0;
     
     income.forEach(i => {
-        const product = products.find(p => p.id === i.productId);
+        const product = historicalProduct(i);
         const costPerUnit = product ? (product.cost || 0) : (i.cost || 0);
         const pricePerUnit = product ? (product.price || 0) : 0;
         
@@ -1618,6 +1637,7 @@ function updatePlanFilters() {
 
 function getFilteredProducts() {
     return products.filter(p => {
+        if (!isProductVisible(p, productFilters.showDeleted)) return false;
         // УМНЫЙ ПОИСК по всем полям товара
         if (productFilters.search) {
             const searchText = `${p.name || ''} ${p.category || ''} ${p.brand || ''} ${p.size || ''}`;
@@ -1657,7 +1677,7 @@ function getFilteredIncome() {
         }
         
         // Фильтр по сумме закупки
-        const product = products.find(p => p.id === i.productId);
+        const product = historicalProduct(i);
         const costPerUnit = product ? (product.cost || 0) : (i.cost || 0);
         const totalCost = costPerUnit * i.quantity;
         
@@ -1791,6 +1811,12 @@ document.getElementById('product-price-max')?.addEventListener('input', (e) => {
     renderProducts();
 });
 
+document.getElementById('product-show-deleted')?.addEventListener('change', (event) => {
+    productFilters.showDeleted = event.target.checked;
+    updateProductFilters();
+    renderProducts();
+});
+
 window.resetProductFilters = function() {
     productFilters = { search: '', category: '', gender: '', brand: '', size: '', condition: '', supplier: '', priceMin: 0, priceMax: 1000000 };
     document.getElementById('product-search').value = '';
@@ -1800,6 +1826,9 @@ window.resetProductFilters = function() {
     document.getElementById('product-size-filter').value = '';
     document.getElementById('product-condition-filter').value = '';
     document.getElementById('product-supplier-filter').value = '';
+    productFilters.showDeleted = false;
+    document.getElementById('product-show-deleted').checked = false;
+    updateProductFilters();
     document.getElementById('product-price-min').value = 0;
     document.getElementById('product-price-max').value = 1000000;
     document.getElementById('product-price-range-label').textContent = '0 - 1000000 ₽';
@@ -2207,8 +2236,7 @@ window.generateInitialIncomes = async function(btn) {
             // Создаём одну запись с общим количеством (вместо отдельных на каждую штуку)
             const totalAmount = (product.cost || 0) * stock;
             
-            await window.firebaseFunctions.addDoc(
-                window.firebaseFunctions.collection(window.firebaseDb, 'income'),
+            await window.archiveOperations.recordOpeningIncome(
                 {
                     productId: product.id,
                     productName: `${product.name} (${product.size || '–'})`,
@@ -2242,13 +2270,38 @@ function initProductSearch(searchInputId, hiddenInputId, dropdownId, onSelectCal
     const dropdown = document.getElementById(dropdownId);
     
     if (!searchInput || !hiddenInput || !dropdown) return;
+    let includeDeleted = false;
+    let showResults;
+    if (searchInputId.startsWith('income-')) {
+        const toggle = document.createElement('label');
+        toggle.className = 'archive-toggle';
+        toggle.innerHTML = '<input type="checkbox" id="income-show-deleted"> Показать удалённые';
+        searchInput.insertAdjacentElement('beforebegin', toggle);
+        toggle.addEventListener('click', event => event.stopPropagation());
+        const hint = document.createElement('p');
+        hint.className = 'archive-status';
+        hint.textContent = 'После поступления удалённый товар снова появится в каталоге';
+        toggle.insertAdjacentElement('afterend', hint);
+        const selected = products.find(p => p.id === hiddenInput.value);
+        toggle.querySelector('input').checked = includeDeleted = Boolean(selected && isProductDeleted(selected));
+        toggle.querySelector('input').addEventListener('change', (event) => {
+            includeDeleted = event.target.checked;
+            const p = products.find(p => p.id === hiddenInput.value);
+            if (!includeDeleted && p && isProductDeleted(p)) {
+                hiddenInput.value = ''; searchInput.value = '';
+                if (onSelectCallback) onSelectCallback('');
+            }
+            showResults();
+        });
+    }
     
-    searchInput.addEventListener('input', (e) => {
-        const query = e.target.value.trim().toLowerCase();
+    searchInput.addEventListener('input', () => {
         hiddenInput.value = '';
-        
         if (onSelectCallback) onSelectCallback('');
-        
+        showResults();
+    });
+    showResults = () => {
+        const query = searchInput.value.trim().toLowerCase();
         if (query.length < 2) {
             dropdown.innerHTML = '';
             dropdown.style.display = 'none';
@@ -2257,6 +2310,7 @@ function initProductSearch(searchInputId, hiddenInputId, dropdownId, onSelectCal
         
         // УМНЫЙ ПОИСК: ищем по названию, бренду, категории и размеру
         const filtered = products.filter(p => {
+            if (!isProductVisible(p, includeDeleted)) return false;
             const searchText = `${p.name || ''} ${p.category || ''} ${p.brand || ''} ${p.size || ''}`;
             return smartSearch(searchText, query);
         }).slice(0, 10); // Показываем максимум 10 результатов
@@ -2271,8 +2325,8 @@ function initProductSearch(searchInputId, hiddenInputId, dropdownId, onSelectCal
             const stockClass = p.stock > 0 ? 'in-stock' : 'out-of-stock';
             const stockText = p.stock > 0 ? `Остаток: ${p.stock}` : 'Нет в наличии';
             return `
-                <div class="dropdown-item" data-product-id="${p.id}">
-                    <div class="product-name">${p.name} ${p.size ? `(${p.size})` : ''}</div>
+                <div class="dropdown-item" data-product-id="${p.id}" role="button" tabindex="0">
+                    <div class="product-name">${p.name} ${p.size ? `(${p.size})` : ''} ${isProductDeleted(p) ? '<span class="archive-badge">Удалён</span>' : ''}</div>
                     <div class="product-meta">
                         <span class="${stockClass}">${stockText}</span>
                         ${p.brand ? `<span class="product-brand">${p.brand}</span>` : ''}
@@ -2285,6 +2339,9 @@ function initProductSearch(searchInputId, hiddenInputId, dropdownId, onSelectCal
         
         // Добавляем обработчики клика на варианты
         dropdown.querySelectorAll('.dropdown-item[data-product-id]').forEach(item => {
+            item.addEventListener('keydown', event => {
+                if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); item.click(); }
+            });
             item.addEventListener('click', () => {
                 const productId = item.dataset.productId;
                 const product = products.find(p => p.id === productId);
@@ -2296,19 +2353,22 @@ function initProductSearch(searchInputId, hiddenInputId, dropdownId, onSelectCal
                 }
             });
         });
-    });
+    };
     
     // Скрываем dropdown при клике вне
+    const controller = new AbortController();
+    window.productSearchControllers ??= [];
+    window.productSearchControllers.push(controller);
     document.addEventListener('click', (e) => {
         if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
             dropdown.style.display = 'none';
         }
-    });
+    }, { signal: controller.signal });
     
     // Фокус на input показывает dropdown если есть значение
     searchInput.addEventListener('focus', () => {
         if (searchInput.value.trim().length >= 2) {
-            searchInput.dispatchEvent(new Event('input'));
+            showResults();
         }
     });
 }

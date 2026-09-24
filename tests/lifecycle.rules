@@ -1,0 +1,72 @@
+// Emulator validation fixture. Merge the lifecycle guards into the actual
+// production role rules before release; do not replace production ACLs with this file.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function statePath() { return /databases/$(database)/documents/_maintenance/productLifecycle; }
+    function revised() {
+      return getAfter(statePath()).data.revision ==
+        (exists(statePath()) ? get(statePath()).data.get('revision', 0) : 0) + 1;
+    }
+    function validProduct(p) {
+      return p.stock is int && p.stock >= 0 &&
+        (!p.get('isDeleted', false) || (p.deletedAt is timestamp &&
+          (p.stock == 0 || p.get('deletionReason', '') == 'manual')));
+    }
+    function retentionEnd(t) {
+      let year = t.year() + 2;
+      let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+      let day = t.month() == 2 && t.day() == 29 && !leap ? 28 : t.day();
+      return timestamp.date(year, t.month(), day) + (t - t.date());
+    }
+    function deletionValid(before, after) {
+      return !after.get('isDeleted', false) ||
+        (before.get('isDeleted', false) && after.deletedAt == before.deletedAt) ||
+        (!before.get('isDeleted', false) && after.deletedAt == request.time &&
+          (after.deletionReason == 'manual' ||
+            (after.deletionReason == 'zero_stock_30_days' && after.stock == 0 &&
+             after.zeroStockSince <= request.time - duration.value(30, 'd') &&
+             after.get('restoredAt', timestamp.date(1970, 1, 1)) <= request.time - duration.value(30, 'd') &&
+             after.get('lifecycleCreatedAt', after.get('legacyCreatedAt', request.time)) <= request.time - duration.value(30, 'd'))));
+    }
+    function zeroValid(before, after) {
+      return (after.stock > 0 && after.get('zeroStockSince', null) == null) ||
+        (after.stock == 0 && (
+          (before.stock == 0 && before.get('zeroStockSince', null) == after.get('zeroStockSince', null)) ||
+          after.zeroStockSince == request.time ||
+          (before.get('lifecycleVersion', 0) != 1 && after.zeroStockSince is timestamp &&
+            after.zeroStockSince <= request.time && after.zeroStockSinceSource == 'legacy_history')));
+    }
+    match /products/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn() && revised() && validProduct(request.resource.data) &&
+        !request.resource.data.get('isDeleted', false) &&
+        request.resource.data.lifecycleCreatedAt == request.time &&
+        (request.resource.data.stock != 0 || request.resource.data.zeroStockSince == request.time);
+      allow update: if signedIn() && revised() && validProduct(request.resource.data) &&
+        deletionValid(resource.data, request.resource.data) && zeroValid(resource.data, request.resource.data);
+      allow delete: if signedIn() && revised() && resource.data.get('isDeleted', false) &&
+        validProduct(resource.data) && resource.data.get('purgeVersion', null) is string &&
+        request.time >= retentionEnd(resource.data.deletedAt);
+    }
+    match /sales/{id} { allow read: if signedIn(); allow write: if signedIn() && revised(); }
+    match /income/{id} { allow read: if signedIn(); allow write: if signedIn() && revised(); }
+    match /plans/{id} { allow read, write: if signedIn(); }
+    match /users/{id} { allow read: if signedIn(); }
+    match /_maintenance/productLifecycle {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.revision == 1 && !request.resource.data.get('enabled', false);
+      allow update: if signedIn() && request.resource.data.enabled == resource.data.enabled && (
+        (request.resource.data.revision == resource.data.revision + 1 &&
+          request.resource.data.get('lastStartedAt', null) == resource.data.get('lastStartedAt', null) &&
+          request.resource.data.get('runId', null) == resource.data.get('runId', null) &&
+          (request.resource.data.get('steps', 0) == resource.data.get('steps', 0) ||
+            (request.resource.data.steps == resource.data.get('steps', 0) + 1 && request.resource.data.steps <= 60))) ||
+        (request.resource.data.revision == resource.data.revision &&
+          request.resource.data.get('lastStartedAt', null) == request.time && request.resource.data.get('steps', -1) == 0 &&
+          request.time >= resource.data.get('lastStartedAt', timestamp.date(1970, 1, 1)) + duration.value(1, 'd'))
+      );
+    }
+  }
+}

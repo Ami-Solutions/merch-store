@@ -36,7 +36,7 @@ const server = createServer(async (req, res) => {
 });
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
-const browser = await chromium.launch({ channel: "msedge", headless: true });
+const browser = await chromium.launch({ channel: "chrome", headless: true });
 const results = [],
   pageErrors = [],
   blocked = [];
@@ -119,7 +119,7 @@ async function pageFor(width, theme) {
   await page.evaluate(() => {
     Chart.defaults.animation = false;
   });
-  for (const file of ["stock-operations", "database", "ui", "app"])
+  for (const file of ["product-lifecycle", "archive-operations", "stock-operations", "database", "ui", "app"])
     await page.addScriptTag({ url: `${base}/js/${file}.js` });
   await page.evaluate(() => {
     window.testErrors = [];

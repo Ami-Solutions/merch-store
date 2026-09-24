@@ -2041,3 +2041,17 @@ tr:hover { background: var(--bg-tertiary); }
 @media (max-width: 480px) {
     .chart-header { flex-wrap: wrap; gap: 12px; }
 }
+.archive-toggle, .modal-body .archive-toggle, .filters-container .archive-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+    cursor: pointer;
+}
+.archive-toggle input[type="checkbox"] { width: 18px; height: 18px; margin: 0; flex-shrink: 0; accent-color: var(--accent); }
+.archive-badge { display: inline-block; margin: 4px 0 4px 8px; padding: 3px 7px; border: 1px solid var(--border); border-radius: 5px; color: var(--text-secondary); font-size: 12px; white-space: nowrap; }
+.archive-status { color: var(--text-secondary); font-size: 13px; line-height: 1.5; margin: 8px 0 16px; }
+.action-btn:disabled { opacity: .45; cursor: not-allowed; }
+.local-demo-banner { padding: 10px 16px; text-align: center; background: var(--bg-tertiary); color: var(--text-secondary); border-bottom: 1px solid var(--border); font-size: 13px; }

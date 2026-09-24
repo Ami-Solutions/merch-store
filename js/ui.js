@@ -21,6 +21,20 @@ let expandedABCGroups = { a: false, b: false, c: false };
 // Состояние раскрытия полного списка залежавшихся товаров
 let staleProductsExpanded = false;
 
+function isProductDeleted(product) { return product.isDeleted === true; }
+function isProductVisible(product, includeDeleted = false) { return includeDeleted || !isProductDeleted(product); }
+function historicalProduct(item) {
+    return products.find(p => p.id === item.productId) || item.productSnapshot || null;
+}
+function historicalProducts() {
+    const rows = new Map(products.map(p => [p.id, p]));
+    for (const item of [...income, ...sales.flatMap(s => s.items || [])]) {
+        if (!rows.has(item.productId) && item.productSnapshot)
+            rows.set(item.productId, { ...item.productSnapshot, id: item.productId, stock: 0, isDeleted: true });
+    }
+    return [...rows.values()].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+}
+
 // Explicit item condition takes precedence over the legacy supplier-based classification.
 // Missing flags retain their old meaning until the individual product is saved.
 function isSecondhandProduct(product) {
@@ -43,7 +57,7 @@ function calcProfitFromSales(salesArray) {
         if (s.excludeFromStats) return totalProfit;
         if (!s.items) return totalProfit;
         const saleProfit = s.items.reduce((profit, item) => {
-            const product = products.find(p => p.id === item.productId);
+            const product = historicalProduct(item);
             const cost = product ? (product.cost || 0) : 0;
             return profit + ((item.price - cost) * item.quantity);
         }, 0);
@@ -88,7 +102,7 @@ function renderProducts() {
     tbody.innerHTML = filtered.map(product => `
         <tr>
             <td>${product.article}</td>
-            <td>${product.name}</td>
+            <td>${product.name}${isProductDeleted(product) ? '<span class="archive-badge">Удалён</span>' : ''}</td>
             <td>${product.category || '–'}</td>
             <td>${product.brand || '–'}</td>
             <td>${getGenderLabel(product.gender)}</td>
@@ -100,11 +114,13 @@ function renderProducts() {
             <td>
                 <button class="action-btn income-btn" onclick="showQuickIncome('${product.id}')">+ Приход</button>
                 <button class="action-btn edit" onclick="editProduct('${product.id}')">Изменить</button>
-                <button class="action-btn delete" onclick="deleteProduct('${product.id}', this)">Удалить</button>
+                ${isProductDeleted(product)
+                    ? `<button class="action-btn edit" onclick="restoreProduct('${product.id}', this)">Восстановить</button>`
+                    : `<button class="action-btn delete" onclick="deleteProduct('${product.id}', this)">Удалить</button>`}
             </td>
         </tr>
     `).join('');
-    document.getElementById('total-products').textContent = products.length;
+    document.getElementById('total-products').textContent = products.filter(p => isProductVisible(p)).length;
 }
 
 function renderSales() {
@@ -138,7 +154,7 @@ function renderIncome() {
     const filtered = getFilteredIncome();
     tbody.innerHTML = filtered.map(item => {
         // Находим товар чтобы взять актуальные цены
-        const product = products.find(p => p.id === item.productId);
+        const product = historicalProduct(item);
         const costPerUnit = product ? (product.cost || 0) : (item.cost || 0);
         const pricePerUnit = product ? (product.price || 0) : 0;
         
@@ -343,7 +359,7 @@ function updateDashboard() {
     document.getElementById('period-median').textContent = formatCurrency(medianCheck);
     document.getElementById('period-min-check').textContent = formatCurrency(minCheck);
 
-    const totalStock = products.reduce((sum, p) => sum + (p.stock || 0), 0);
+    const totalStock = products.filter(p => isProductVisible(p)).reduce((sum, p) => sum + (p.stock || 0), 0);
     document.getElementById('total-stock').textContent = totalStock;
 
     if (income.length > 0) {
@@ -520,7 +536,7 @@ function renderDistributionChart() {
     
     if (distributionChart) distributionChart.destroy();
 
-    const inStockProducts = products.filter(p => p.stock > 0);
+    const inStockProducts = products.filter(p => isProductVisible(p) && p.stock > 0);
     
     if (inStockProducts.length === 0) {
         distributionChart = new Chart(ctx, {
@@ -654,11 +670,11 @@ function renderABCContent(metric) {
     const content = document.getElementById('abc-content');
     if (!content) return;
     
-    let filteredProducts = products;
+    let filteredProducts = historicalProducts();
     if (currentABCType === 'brand') {
-        filteredProducts = products.filter(p => !isSecondhandProduct(p));
+        filteredProducts = historicalProducts().filter(p => !isSecondhandProduct(p));
     } else if (currentABCType === 'secondhand') {
-        filteredProducts = products.filter(isSecondhandProduct);
+        filteredProducts = historicalProducts().filter(isSecondhandProduct);
     }
     
     const productData = {};
@@ -678,7 +694,7 @@ function renderABCContent(metric) {
             s.items.forEach(item => {
                 const pd = productData[item.productId];
                 if (pd) {
-                    const product = products.find(p => p.id === item.productId);
+                    const product = historicalProduct(item);
                     const cost = product ? (product.cost || 0) : 0;
                     pd.revenue += item.total;
                     pd.profit += (item.price - cost) * item.quantity;
@@ -794,7 +810,7 @@ function renderSizeAnalysis() {
     const container = document.getElementById('size-analysis-container');
     if (!container) return;
     
-    const brandProducts = products.filter(isReorderableProduct);
+    const brandProducts = historicalProducts().filter(isReorderableProduct);
     
     if (brandProducts.length === 0) {
         container.innerHTML = '<div class="analytics-empty">Нет новых товаров постоянных поставщиков для анализа размерной сетки</div>';
@@ -807,14 +823,14 @@ function renderSizeAnalysis() {
         if (!sizeData[size]) {
             sizeData[size] = { size, stock: 0, sold: 0, revenue: 0 };
         }
-        sizeData[size].stock += (p.stock || 0);
+        if (isProductVisible(p)) sizeData[size].stock += (p.stock || 0);
     });
     
     sales.forEach(s => {
         if (s.excludeFromStats) return;
         if (s.items) {
             s.items.forEach(item => {
-                const product = products.find(p => p.id === item.productId);
+                const product = historicalProduct(item);
                 if (product && isReorderableProduct(product)) {
                     const size = product.size || 'Без размера';
                     if (!sizeData[size]) sizeData[size] = { size, stock: 0, sold: 0, revenue: 0 };
@@ -834,7 +850,7 @@ function renderSizeAnalysis() {
     const avgSold = sizes.reduce((sum, s) => sum + s.sold, 0) / sizes.length;
     
     container.innerHTML = `
-        <div class="analytics-subtitle">Только новые товары постоянных поставщиков (можно дозаказать)</div>
+        <div class="analytics-subtitle">Спрос по истории новых товаров постоянных поставщиков и текущий остаток</div>
         <div class="size-analysis-grid">
             ${sizes.map(s => {
                 let cls = '';
@@ -877,7 +893,7 @@ function renderAvgSaleTime() {
         const saleDate = new Date(sale.date);
         
         sale.items.forEach(item => {
-            const product = products.find(p => p.id === item.productId);
+            const product = historicalProduct(item);
             if (!product) return;
             
             const category = product.category || 'Без категории';
@@ -988,11 +1004,11 @@ function renderTurnoverContent() {
     const period = 30;
     const periodAgo = new Date(now.getTime() - period * 86400000);
     
-    let filteredProducts = products;
+    let filteredProducts = historicalProducts();
     if (currentTurnoverType === 'brand') {
-        filteredProducts = products.filter(p => !isSecondhandProduct(p));
+        filteredProducts = historicalProducts().filter(p => !isSecondhandProduct(p));
     } else if (currentTurnoverType === 'secondhand') {
-        filteredProducts = products.filter(isSecondhandProduct);
+        filteredProducts = historicalProducts().filter(isSecondhandProduct);
     }
     
     const brandData = {};
@@ -1001,7 +1017,7 @@ function renderTurnoverContent() {
         if (!brandData[brand]) {
             brandData[brand] = { brand, stock: 0, sold30: 0, revenue: 0 };
         }
-        brandData[brand].stock += (p.stock || 0);
+        if (isProductVisible(p)) brandData[brand].stock += (p.stock || 0);
     });
     
     sales.forEach(s => {
@@ -1009,7 +1025,7 @@ function renderTurnoverContent() {
         if (new Date(s.date) < periodAgo) return;
         if (s.items) {
             s.items.forEach(item => {
-                const product = products.find(p => p.id === item.productId);
+                const product = historicalProduct(item);
                 if (product) {
                     const matchesFilter = currentTurnoverType === 'all' || 
                         (currentTurnoverType === 'brand' && !isSecondhandProduct(product)) ||
@@ -1090,7 +1106,7 @@ function renderStaleProducts() {
     
     const staleItems = [];
     products.forEach(p => {
-        if ((p.stock || 0) <= 0) return;
+        if (!isProductVisible(p) || (p.stock || 0) <= 0) return;
         
         const thresholdDays = isSecondhandProduct(p) ? 120 : 90;
         const threshold = new Date(now.getTime() - thresholdDays * 86400000);
@@ -1216,7 +1232,7 @@ function renderMarginByType() {
         if (!sale.items) return;
         
         sale.items.forEach(item => {
-            const product = products.find(p => p.id === item.productId);
+            const product = historicalProduct(item);
             if (!product) return;
             
             const cost = product.cost || 0;
@@ -1300,7 +1316,7 @@ function renderMarkupCoefficient() {
     const brandMarkups = [];
     const secondhandMarkups = [];
     
-    products.forEach(p => {
+    products.filter(p => isProductVisible(p)).forEach(p => {
         if (!p.cost || p.cost <= 0 || !p.price || p.price <= 0) return;
         const markup = p.price / p.cost;
         
@@ -1363,7 +1379,7 @@ function renderSoldPercentage() {
     const secondhandStats = { received: 0, sold: 0 };
     
     recentIncomes.forEach(inc => {
-        const product = products.find(p => p.id === inc.productId);
+        const product = historicalProduct(inc);
         if (!product) return;
         
         if (!isSecondhandProduct(product)) {
@@ -1379,7 +1395,7 @@ function renderSoldPercentage() {
         if (!sale.items) return;
         
         sale.items.forEach(item => {
-            const product = products.find(p => p.id === item.productId);
+            const product = historicalProduct(item);
             if (!product) return;
             
             if (!isSecondhandProduct(product)) {

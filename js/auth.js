@@ -25,36 +25,40 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
 });
 
 async function loadUserData(user) {
+    const generation = window.authGeneration || 0;
     const usersRef = window.firebaseFunctions.collection(window.firebaseDb, 'users');
     const q = window.firebaseFunctions.query(
         usersRef, 
         window.firebaseFunctions.where('uid', '==', user.uid)
     );
     const querySnapshot = await window.firebaseFunctions.getDocs(q);
+    if (generation !== (window.authGeneration || 0)) return;
     
     if (!querySnapshot.empty) {
         const userData = querySnapshot.docs[0].data();
         window.currentUser = userData;
+        window.currentUser.uid = user.uid;
         
         document.getElementById('user-role').textContent = 
             userData.role === 'owner' ? 'Владелец' : 'Продавец';
         
-        if (userData.role !== 'owner') {
-            document.getElementById('plans-link').parentElement.style.display = 'none';
-            document.getElementById('users-link').parentElement.style.display = 'none';
-            document.getElementById('mobile-plans-link').style.display = 'none';
-            document.getElementById('mobile-users-link').style.display = 'none';
-        }
+        const restricted = userData.role === 'owner' ? '' : 'none';
+        document.getElementById('plans-link').parentElement.style.display = restricted;
+        document.getElementById('users-link').parentElement.style.display = restricted;
+        document.getElementById('mobile-plans-link').style.display = restricted;
+        document.getElementById('mobile-users-link').style.display = restricted;
         
         if (userData.role === 'owner') {
-            loadUsers();
+            await loadUsers();
         }
     }
 }
 
 async function loadUsers() {
+    const generation = window.authGeneration || 0;
     const usersRef = window.firebaseFunctions.collection(window.firebaseDb, 'users');
     const querySnapshot = await window.firebaseFunctions.getDocs(usersRef);
+    if (generation !== (window.authGeneration || 0)) return;
     
     const users = [];
     querySnapshot.forEach((doc) => {

@@ -15,7 +15,7 @@ window.stockOperations = (() => {
             return Object.fromEntries(
                 Object.keys(value)
                     .sort()
-                    .filter((key) => key !== 'id' && value[key] !== undefined)
+                    .filter((key) => key !== 'id' && key !== 'productSnapshot' && value[key] !== undefined)
                     .map((key) => [key, canonical(value[key])]),
             );
         }
@@ -100,7 +100,8 @@ window.stockOperations = (() => {
         next = next && JSON.parse(JSON.stringify(next));
         if (next) delete next.id; // getDocs() adds this only to the local view model.
         previous = previous && JSON.parse(JSON.stringify(previous));
-        return api.runTransaction(window.firebaseDb, async (transaction) => {
+        const lifecycle = window.archiveOperations;
+        return lifecycle.transact(async (transaction, revision) => {
             const snapshot = await transaction.get(ref);
             const actual = snapshot.exists() ? snapshot.data() : null;
             if (!actual && previous) {
@@ -131,13 +132,23 @@ window.stockOperations = (() => {
             const changes = [];
             // All reads and validation precede all writes, including multi-item sales.
             for (const [id, delta] of deltas) {
-                if (delta === 0) continue;
                 const productRef = api.doc(window.firebaseDb, 'products', id);
                 const productSnapshot = await transaction.get(productRef);
-                if (!productSnapshot.exists())
+                if (!productSnapshot.exists()) {
+                    if (delta === 0 && actual) {
+                        if (next && collection === 'sales') next.items = next.items.map(item => {
+                            const previousItem = actual.items.find(old => old.productId === item.productId);
+                            return item.productId === id && previousItem?.productSnapshot
+                                ? { ...item, productSnapshot: previousItem.productSnapshot } : item;
+                        });
+                        if (next && collection === 'income' && actual.productSnapshot)
+                            next.productSnapshot = actual.productSnapshot;
+                        continue;
+                    }
                     fail(
-                        'Один из товаров удалён. Обновите журнал и проверьте его историю',
+                        'Карточка товара окончательно удалена. Изменение её количества недоступно',
                     );
+                }
                 const product = productSnapshot.data();
                 const stock = product.stock;
                 if (
@@ -151,13 +162,26 @@ window.stockOperations = (() => {
                         `Недостаточно остатка: ${product.name}. Доступно ${Math.max(0, stock)} шт. Обновите данные`,
                     );
                 }
-                changes.push({ ref: productRef, stock: stock + delta });
+                if (!actual && collection === 'sales' && product.isDeleted)
+                    fail('Товар удалён. Сначала восстановите его поступлением');
+                const historical = window.productLifecycle.snapshot({ id, ...product }, 'operation');
+                if (next) {
+                    if (collection === 'income' && next.productId === id) next.productSnapshot = historical;
+                    else if (collection === 'sales') next.items = next.items.map(item =>
+                        item.productId === id ? { ...item, productSnapshot: historical } : item);
+                }
+                // Any history edit invalidates an unfinished purge, even at zero delta.
+                if (delta !== 0 || product.purgeVersion) changes.push({ ref: productRef, patch: {
+                    ...(delta === 0 ? {} : lifecycle.stockPatch(product, stock + delta)),
+                    purgeVersion: null,
+                } });
             }
             for (const change of changes)
-                transaction.update(change.ref, { stock: change.stock });
+                transaction.update(change.ref, change.patch);
             if (!next) transaction.delete(ref);
             else if (actual) transaction.update(ref, next);
             else transaction.set(ref, next);
+            lifecycle.bump(transaction, revision);
             return ref.id;
         });
     }
@@ -180,19 +204,15 @@ window.stockOperations = (() => {
             'income',
             'initial-' + ref.id,
         );
-        return api.runTransaction(window.firebaseDb, async (transaction) => {
+        const lifecycle = window.archiveOperations;
+        return lifecycle.transact(async (transaction, revision) => {
             const existing = await transaction.get(ref);
             const existingReceipt = await transaction.get(receiptRef);
             if (existing.exists()) {
                 // These two values are generated on submission, not entered by the user.
-                const sameProduct = same(
-                    {
-                        ...existing.data(),
-                        createdAt: data.createdAt,
-                        article: data.article,
-                    },
-                    data,
-                );
+                const stored = existing.data();
+                const sameProduct = same(Object.fromEntries(Object.keys(data).map(key =>
+                    [key, key === 'createdAt' || key === 'article' ? data[key] : stored[key]])), data);
                 const sameReceipt = receipt
                     ? existingReceipt.exists() &&
                       same(existingReceipt.data(), receipt)
@@ -202,8 +222,11 @@ window.stockOperations = (() => {
             }
             if (existingReceipt.exists())
                 fail('Начальное поступление уже существует. Обновите журнал');
-            transaction.set(ref, data);
-            if (receipt) transaction.set(receiptRef, receipt);
+            transaction.set(ref, { ...data, lifecycleCreatedAt: api.serverTimestamp(),
+                ...lifecycle.stockPatch({ stock: -1 }, data.stock), isDeleted: false });
+            if (receipt) transaction.set(receiptRef, { ...receipt,
+                productSnapshot: window.productLifecycle.snapshot({ id: ref.id, ...data }, 'operation') });
+            lifecycle.bump(transaction, revision);
             return ref.id;
         });
     }

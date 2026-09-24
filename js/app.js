@@ -46,6 +46,11 @@ function hideLoader() {
 
 // === TOOLTIP SYSTEM ===
 const TOOLTIPS = {
+    'deleted-products': {
+        title: 'Удалённые товары',
+        description: 'Скрытые карточки товаров. Вручную можно удалить и товар с остатком: количество сохраняется для восстановления, но не входит в текущие складские показатели. История продаж и поступлений сохраняется. Новое поступление восстанавливает товар автоматически.',
+        example: 'После 30 полных суток без остатка товар отмечается удалённым. Через два года после отметки карточка очищается при очередной проверке. Названия и данные операций остаются в истории.'
+    },
     'sales-total': {
         title: 'Продажи за период',
         description: 'Суммарная выручка за выбранный период. Учитываются только продажи без отметки "Убрать из статистики".',
@@ -68,7 +73,7 @@ const TOOLTIPS = {
     },
     'markup-coefficient': {
         title: 'Коэффициент наценки',
-        description: 'Показывает, во сколько раз цена продажи превышает цену закупки. Рассчитывается как: цена продажи ÷ цена закупки.',
+        description: 'Показывает, во сколько раз цена продажи превышает цену закупки. Рассчитывается по активному ассортименту: цена продажи ÷ цена закупки. Удалённые карточки исключены.',
         example: 'Пример: Секонд – коэффициент 6x (закупка 500₽ → продажа 3000₽). Новые товары – коэффициент 2.4x (закупка 5000₽ → продажа 12000₽).'
     },
     'abc-analysis': {
@@ -78,7 +83,7 @@ const TOOLTIPS = {
     },
     'size-analysis': {
         title: 'Анализ размерной сетки',
-        description: 'Показывает, какие размеры продаются лучше/хуже. Анализ только для новых товаров постоянных поставщиков, которые можно дозаказать. Б/у вещи не учитываются, даже если бренд является постоянным поставщиком.',
+        description: 'Показывает спрос по истории новых товаров постоянных поставщиков и текущий остаток. Продажи удалённых карточек сохраняются в анализе спроса. Доступность конкретного товара для дозаказа проверяйте в активном каталоге. Б/у вещи не учитываются.',
         example: 'Пример: размер M продаётся в 4 раза чаще, чем S. Если закупать их поровну – S будет копиться, а M постоянно заканчиваться.'
     },
     'avg-sale-time': {
@@ -239,19 +244,91 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function showAuth() {
+    window.authGeneration = (window.authGeneration || 0) + 1;
+    window.currentUser = null;
+    products = []; income = []; sales = []; plans = []; allUsers = [];
+    currentSaleItems = [];
+    editingSaleSnapshot = null; editingIncomeSnapshot = null;
+    window.lastArchiveReport = null;
+    closeModal();
+    resetProductFilters();
+    document.getElementById('archive-status').hidden = true;
     document.getElementById('auth-screen').classList.add('active');
     document.getElementById('app-screen').classList.remove('active');
     hideLoader();
 }
 
 async function showApp(user) {
+    const generation = window.authGeneration = (window.authGeneration || 0) + 1;
+    resetProductFilters();
     showLoader();
     document.getElementById('auth-screen').classList.remove('active');
     document.getElementById('app-screen').classList.add('active');
-    await loadUserData(user);
-    document.getElementById('welcome-username').textContent = window.currentUser.name || 'пользователь';
+    try {
+        await loadUserData(user);
+        if (generation !== window.authGeneration) return;
+        if (!window.currentUser) throw new Error('Не найдена учётная запись сотрудника');
+        document.getElementById('welcome-username').textContent = window.currentUser.name || 'пользователь';
+        await loadDashboardData(generation);
+    } catch (error) { if (generation === window.authGeneration) showError('Не удалось загрузить данные. Обновите страницу'); }
+    finally { if (generation === window.authGeneration) hideLoader(); }
+}
+
+async function loadDashboardData(generation = window.authGeneration || 0) {
+    const state = await window.archiveOperations.readState();
     await Promise.all([loadProducts(), loadSales(), loadIncome(), loadPlans()]);
-    hideLoader();
+    if (generation !== (window.authGeneration || 0)) return;
+    updateDashboard();
+    // Detached snapshots avoid mutations of an open form or a concurrent refresh.
+    const snapshot = JSON.parse(JSON.stringify({ products, income, sales }));
+    if (state.enabled === true) void runArchiveMaintenance({ ...snapshot, expectedRevision: state.revision || 0, generation });
+}
+
+async function runArchiveMaintenance(snapshot) {
+    const status = document.getElementById('archive-status');
+    try {
+        const report = await window.archiveOperations.run(snapshot);
+        if (snapshot.generation !== (window.authGeneration || 0) || report.skipped) return;
+        window.lastArchiveReport = report;
+        status.hidden = false;
+        status.textContent = `Проверка каталога: удалено ${report.archived}, очищено карточек ${report.purged}` +
+            (report.exceptions.length ? ` · Требуют проверки: ${report.exceptions.length}` : '') +
+            (report.paused ? ' · Продолжение отложено, работа магазина доступна' : '');
+        if (report.exceptions.length) {
+            const button = document.createElement('button');
+            button.className = 'btn-small'; button.textContent = 'Посмотреть';
+            button.addEventListener('click', () => {
+                openModal('Товары для проверки', '<div id="archive-exceptions"></div>');
+                const list = document.getElementById('archive-exceptions');
+                for (const item of report.exceptions) {
+                    const row = document.createElement('p');
+                    row.textContent = `${products.find(p => p.id === item.id)?.name || item.id}: ${item.reason}`;
+                    list.appendChild(row);
+                }
+            });
+            status.appendChild(document.createTextNode(' ')); status.appendChild(button);
+        }
+        if (report.paths?.length) {
+            const api = window.firebaseFunctions;
+            const changed = await Promise.all(report.paths.map(path => api.getDocFromServer(api.doc(window.firebaseDb, path))));
+            if (snapshot.generation !== (window.authGeneration || 0)) return;
+            for (const row of changed) {
+                const collection = row.ref.parent.id;
+                const values = collection === 'products' ? products : collection === 'sales' ? sales : income;
+                const index = values.findIndex(item => item.id === row.id);
+                if (row.exists()) {
+                    const next = { id: row.id, ...row.data() };
+                    if (index === -1) values.push(next); else values[index] = next;
+                } else if (index !== -1) values.splice(index, 1);
+            }
+            renderProducts(); updateProductFilters(); renderSales(); renderIncome(); updateDashboard();
+        }
+    } catch (error) {
+        if (snapshot.generation !== (window.authGeneration || 0)) return;
+        status.hidden = false;
+        status.textContent = 'Проверка каталога отложена. Продажи и поступления доступны';
+        console.warn('Catalog maintenance paused:', error.code || error.message);
+    }
 }
 
 function switchSection(sectionName) {
@@ -267,12 +344,16 @@ function switchSection(sectionName) {
 }
 
 function openModal(title, content) {
+    window.productSearchControllers?.forEach(controller => controller.abort());
+    window.productSearchControllers = [];
     document.getElementById('modal-title').textContent = title;
     document.getElementById('modal-body').innerHTML = content;
     document.getElementById('modal-overlay').classList.add('active');
 }
 
 function closeModal() {
+    window.productSearchControllers?.forEach(controller => controller.abort());
+    window.productSearchControllers = [];
     document.getElementById('modal-overlay').classList.remove('active');
     editingSaleId = null;
     editingIncomeId = null;
@@ -295,6 +376,7 @@ function formatCurrency(amount) {
 }
 
 function formatDate(timestamp) {
+    if (!Number.isFinite(new Date(timestamp).getTime())) return 'Дата не указана';
     return new Date(timestamp).toLocaleDateString('ru-RU', {
         day: '2-digit', month: '2-digit', year: 'numeric',
         hour: '2-digit', minute: '2-digit'
@@ -310,9 +392,9 @@ function formatDateShort(dateStr) {
 // === REFRESH FUNCTIONS ===
 window.refreshDashboard = async function() {
     showLoader();
-    await Promise.all([loadProducts(), loadSales(), loadIncome(), loadPlans()]);
-    updateDashboard();
-    hideLoader();
+    try { await loadDashboardData(); }
+    catch (error) { showError('Не удалось обновить данные'); }
+    finally { hideLoader(); }
 };
 
 window.refreshProducts = async function() {

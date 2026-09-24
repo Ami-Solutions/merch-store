@@ -55,7 +55,7 @@ const output = new URL(
   import.meta.url,
 );
 await mkdir(output, { recursive: true });
-const browser = await chromium.launch({ channel: "msedge", headless: true });
+const browser = await chromium.launch({ channel: "chrome", headless: true });
 const results = [],
   errors = [],
   blocked = [];

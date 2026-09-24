@@ -20,7 +20,7 @@ function run(cmd, args) {
 }
 let started = false;
 try {
-  await run(process.execPath, ["--test", "tests/condition.test.mjs"]);
+  await run(process.execPath, ["--test", "tests/condition.test.mjs", "tests/lifecycle.test.mjs"]);
   await run(process.execPath, ["tests/product-filters.mjs"]);
   await mkdir(new URL("output/", root), { recursive: true });
   const jar = new URL("output/firestore.jar", root);
@@ -88,6 +88,8 @@ try {
     await run(process.execPath, ["tests/condition-browser.mjs"]);
   if (!process.argv.includes("--condition-only"))
     await run(process.execPath, ["tests/stock-regression.mjs"]);
+  if (!process.argv.includes("--stock-only") && !process.argv.includes("--condition-only"))
+    await run(process.execPath, ["tests/archive-browser.mjs"]);
 } finally {
   if (started) await run("docker", ["stop", container]);
 }
