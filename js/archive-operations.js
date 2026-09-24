@@ -54,8 +54,9 @@ window.archiveOperations = (() => {
                 deletedBy: null, purgeVersion: null,
                 ...(product.isDeleted ? { restoredAt: stamp() } : {}) });
         }
-        else if (product.stock !== 0 || !product.zeroStockSince)
+        else if (stock === 0 && (product.stock !== 0 || !product.zeroStockSince))
             Object.assign(patch, { zeroStockSince: stamp(), zeroStockSinceSource: 'operation' });
+        else if (stock < 0) patch.zeroStockSince = null;
         return patch;
     }
     async function changeStatus(id, restore = false) {

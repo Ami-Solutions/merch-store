@@ -18,7 +18,7 @@ export async function startEmulator() {
         throw new Error('Run npm test first to download the verified Firestore emulator');
     await run('docker', ['run', '--detach', '--rm', '--name', container,
         '--publish', '127.0.0.1:18081:8080', '--mount', `type=bind,source=${fileURLToPath(jar)},target=/work/firestore.jar,readonly`,
-        '--mount', `type=bind,source=${fileURLToPath(new URL('../tests/lifecycle.rules', import.meta.url))},target=/work/firestore.rules,readonly`,
+        '--mount', `type=bind,source=${fileURLToPath(new URL('../firestore.rules', import.meta.url))},target=/work/firestore.rules,readonly`,
         'eclipse-temurin:21-jre', 'java', '-jar', '/work/firestore.jar', '--host', '0.0.0.0', '--port', '8080',
         '--project_id', project, '--single_project_mode', '--single_project_mode_error', '--rules', '/work/firestore.rules']);
     const stop = () => run('docker', ['stop', container]);

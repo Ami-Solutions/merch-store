@@ -10,6 +10,7 @@ let editingIncomeSnapshot = null;
 let editingSaleSnapshot = null;
 
 function stockErrorMessage(error, fallback) {
+    if (error.code === 'permission-denied') return 'Не удалось сохранить изменения. Обновите страницу: могла выйти новая версия админки или измениться доступ';
     return error.isStockError ? error.message : fallback;
 }
 

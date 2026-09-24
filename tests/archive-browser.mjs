@@ -216,6 +216,18 @@ try {
     assert.equal(received.stock, 6); assert.equal(received.isDeleted, false);
     results.push('maintenance retains manually deleted stock, two-year purge supports positive quantity, receiving restores retained quantity');
 
+    const negativeFixture = archiveFixture();
+    negativeFixture['products/negative'] = { ...negativeFixture['products/active'], stock: -2 };
+    await seed(negativeFixture);
+    await page.evaluate(async () => {
+        await archiveOperations.updateProduct('negative', { price: 400 });
+        await testSave('income', { productId: 'negative', productName: 'Старое расхождение', quantity: 1, cost: 100, totalAmount: 100, date: new Date().toISOString() });
+    });
+    const improved = await page.evaluate(() => testRead('products/negative'));
+    assert.equal(improved.stock, -1); assert.equal(improved.zeroStockSince, null);
+    await assert.rejects(page.evaluate(() => archiveOperations.changeStatus('negative')), /некорректный остаток/);
+    results.push('production rules preserve metadata edits and receipts that improve an existing negative balance');
+
     await seed(archiveFixture());
     await page.evaluate(() => testRun());
     const beforeRestore = await page.evaluate(() => testRead('products/old'));

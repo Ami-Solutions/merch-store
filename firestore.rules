@@ -1,5 +1,5 @@
-// Emulator validation fixture. Merge the lifecycle guards into the actual
-// production role rules before release; do not replace production ACLs with this file.
+// Based on the production rules read on 2026-09-24: authenticated access.
+// Keep the existing access policy outside lifecycle-controlled collections.
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -38,22 +38,32 @@ service cloud.firestore {
           (before.get('lifecycleVersion', 0) != 1 && after.zeroStockSince is timestamp &&
             after.zeroStockSince <= request.time && after.zeroStockSinceSource == 'legacy_history')));
     }
+    function legacyNegative(before, after) {
+      // Existing negative balances may be corrected by receipts/returns without
+      // concealing stock or creating a new negative balance. Never auto-delete.
+      return before.stock is int && before.stock < 0 && after.stock is int &&
+        after.stock >= before.stock && after.stock < 0 &&
+        !after.get('isDeleted', false) && after.get('zeroStockSince', null) == null;
+    }
     match /products/{id} {
       allow read: if signedIn();
       allow create: if signedIn() && revised() && validProduct(request.resource.data) &&
         !request.resource.data.get('isDeleted', false) &&
         request.resource.data.lifecycleCreatedAt == request.time &&
         (request.resource.data.stock != 0 || request.resource.data.zeroStockSince == request.time);
-      allow update: if signedIn() && revised() && validProduct(request.resource.data) &&
-        deletionValid(resource.data, request.resource.data) && zeroValid(resource.data, request.resource.data);
+      allow update: if signedIn() && revised() && (
+        (validProduct(request.resource.data) && deletionValid(resource.data, request.resource.data) &&
+          zeroValid(resource.data, request.resource.data)) || legacyNegative(resource.data, request.resource.data));
       allow delete: if signedIn() && revised() && resource.data.get('isDeleted', false) &&
         validProduct(resource.data) && resource.data.get('purgeVersion', null) is string &&
         request.time >= retentionEnd(resource.data.deletedAt);
     }
     match /sales/{id} { allow read: if signedIn(); allow write: if signedIn() && revised(); }
     match /income/{id} { allow read: if signedIn(); allow write: if signedIn() && revised(); }
-    match /plans/{id} { allow read, write: if signedIn(); }
-    match /users/{id} { allow read: if signedIn(); }
+    match /{collection}/{document=**} {
+      allow read, write: if signedIn() &&
+        !(collection in ['products', 'sales', 'income', '_maintenance']);
+    }
     match /_maintenance/productLifecycle {
       allow read: if signedIn();
       allow create: if signedIn() && request.resource.data.revision == 1 && !request.resource.data.get('enabled', false);
