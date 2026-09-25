@@ -1724,6 +1724,13 @@ tr:hover { background: var(--bg-tertiary); }
 .brand-card.fast { border-left: 4px solid var(--success); }
 .brand-card.medium { border-left: 4px solid var(--warning); }
 .brand-card.slow { border-left: 4px solid var(--danger); }
+.brand-card.invalid { border-left: 4px solid var(--warning); }
+.stock-warning { color: var(--text-primary); font-size: 12px; line-height: 1.5; margin: 8px 0 12px; }
+.stock-correction-note { padding: 12px 14px; margin-bottom: 16px; border-left: 3px solid var(--warning); border-radius: 8px; background: var(--bg-tertiary); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.stock-correction-note h4 { margin: 0 0 8px; font-size: 14px; }
+.stock-correction-note p { margin: 8px 0 0; }
+.admin-update-notice { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; background: var(--bg-secondary); color: var(--text-primary); border-bottom: 2px solid var(--warning); font-size: 13px; line-height: 1.5; }
+.admin-update-notice .btn-secondary { width: auto; padding: 7px 12px; flex-shrink: 0; }
 .brand-card .brand-name {
     font-size: 15px;
     font-weight: 600;

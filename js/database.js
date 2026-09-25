@@ -10,7 +10,12 @@ let editingIncomeSnapshot = null;
 let editingSaleSnapshot = null;
 
 function stockErrorMessage(error, fallback) {
-    if (error.code === 'permission-denied') return 'Не удалось сохранить изменения. Обновите страницу: могла выйти новая версия админки или измениться доступ';
+    const code = String(error.code || '').replace(/^firestore\//, '');
+    if (code === 'permission-denied') return 'Сохранение отклонено. Сохраните данные открытой формы, затем обновите страницу (Ctrl+F5 на компьютере) и повторите вход. Если ошибка останется, сообщите код permission-denied';
+    if (code === 'unauthenticated') return 'Сессия входа истекла. Сохраните данные открытой формы и войдите в аккаунт заново';
+    if (['unavailable', 'deadline-exceeded'].includes(code)) return 'Не удалось получить подтверждение от сервера. Проверьте интернет и повторите сохранение в этой же форме: повторная операция не создастся';
+    if (code === 'resource-exhausted') return 'Firebase временно ограничил запросы. Попробуйте позже. Код: resource-exhausted';
+    if (code === 'aborted') return 'Товары изменились во время сохранения. Повторите сохранение: остатки будут проверены заново';
     return error.isStockError ? error.message : fallback;
 }
 
@@ -898,6 +903,7 @@ window.saveSale = async function(btn) {
     btn.disabled = true;
     btn.textContent = 'Сохранение...';
 
+    let saved = false;
     try {
         await window.stockOperations.save('sales',
             {
@@ -915,6 +921,7 @@ window.saveSale = async function(btn) {
                 excludeFromStats: excludeFromStats
             }, null, btn
         );
+        saved = true;
 
         closeModal();
         currentSaleItems = [];
@@ -923,7 +930,7 @@ window.saveSale = async function(btn) {
         await loadProducts();
         updateDashboard();
     } catch (error) {
-        showError(stockErrorMessage(error, 'Ошибка при сохранении продажи'));
+        showError(saved ? 'Продажа сохранена. Не удалось обновить список — обновите страницу. Повторно оформлять эту продажу не нужно' : stockErrorMessage(error, 'Ошибка при сохранении продажи'));
         console.error(error);
         btn.disabled = false;
         btn.textContent = 'Оформить продажу';
@@ -958,6 +965,7 @@ window.updateSale = async function(saleId, btn) {
     btn.disabled = true;
     btn.textContent = 'Сохранение...';
 
+    let saved = false;
     try {
         await window.stockOperations.save('sales',
             {
@@ -975,6 +983,7 @@ window.updateSale = async function(saleId, btn) {
                 excludeFromStats: excludeFromStats
             }, oldSale, btn
         );
+        saved = true;
 
         closeModal();
         currentSaleItems = [];
@@ -983,7 +992,7 @@ window.updateSale = async function(saleId, btn) {
         await loadProducts();
         updateDashboard();
     } catch (error) {
-        showError(stockErrorMessage(error, 'Ошибка при обновлении продажи'));
+        showError(saved ? 'Изменения продажи сохранены. Не удалось обновить список — обновите страницу. Повторять изменения не нужно' : stockErrorMessage(error, 'Ошибка при обновлении продажи'));
         console.error(error);
         btn.disabled = false;
         btn.textContent = 'Сохранить изменения';
@@ -2096,12 +2105,22 @@ window.showIncomeHistory = function(productId) {
         `).join('') + '</div>';
     }
     
+    const correction = product.stockCorrection;
+    const correctionTime = correction && window.productLifecycle.millis(correction.recordedAt);
+    const correctionHtml = correction && Number.isSafeInteger(correction.before) && Number.isSafeInteger(correction.after) ? `
+        <div class="stock-correction-note">
+            <h4>Корректировка остатка</h4>
+            <div>${Number.isFinite(correctionTime) ? formatDate(new Date(correctionTime).toISOString()) + ' · ' : ''}<strong>${correction.before} → ${correction.after} шт.</strong></div>
+            <p>Исторический отрицательный остаток принят равным нулю. Фактическое наличие не подтверждено пересчётом.</p>
+            <p>Корректировка не является поступлением и не меняет суммы продаж и закупок.</p>
+        </div>` : '';
     const content = `
         <div style="padding: 10px 14px; background: var(--bg-tertiary); border-radius: 8px; margin-bottom: 16px;">
             <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Товар</div>
             <div style="font-weight: 600; font-size: 14px;">${product.name} ${product.size ? '(' + product.size + ')' : ''}</div>
             <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Текущий остаток: <strong style="color: var(--accent);">${product.stock}</strong> · Всего приходов: <strong>${records.length}</strong></div>
         </div>
+        ${correctionHtml}
         <h4 style="font-size: 14px; margin-bottom: 8px;">История приходов</h4>
         ${listHtml}
     `;

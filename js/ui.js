@@ -1015,9 +1015,12 @@ function renderTurnoverContent() {
     filteredProducts.forEach(p => {
         const brand = p.brand || 'Без бренда';
         if (!brandData[brand]) {
-            brandData[brand] = { brand, stock: 0, sold30: 0, revenue: 0 };
+            brandData[brand] = { brand, stock: 0, sold30: 0, revenue: 0, invalidStock: false };
         }
-        if (isProductVisible(p)) brandData[brand].stock += (p.stock || 0);
+        if (isProductVisible(p)) {
+            brandData[brand].stock += Number.isFinite(p.stock) ? p.stock : 0;
+            if (!window.productLifecycle.validStock(p)) brandData[brand].invalidStock = true;
+        }
     });
     
     sales.forEach(s => {
@@ -1042,7 +1045,7 @@ function renderTurnoverContent() {
         }
     });
     
-    const brands = Object.values(brandData).filter(b => b.stock > 0 || b.sold30 > 0);
+    const brands = Object.values(brandData).filter(b => b.stock > 0 || b.sold30 > 0 || b.invalidStock);
     if (brands.length === 0) {
         content.innerHTML = '<div class="analytics-empty">Нет данных</div>';
         return;
@@ -1050,13 +1053,16 @@ function renderTurnoverContent() {
     
     brands.forEach(b => {
         b.velocity = b.sold30 / period;
-        b.turnoverDays = b.velocity > 0 ? Math.round(b.stock / b.velocity) : Infinity;
-        if (b.turnoverDays < 30) b.class = 'fast';
+        b.turnoverDays = b.invalidStock ? null : b.velocity > 0 ? Math.round(b.stock / b.velocity) : Infinity;
+        if (b.invalidStock) b.class = 'invalid';
+        else if (b.turnoverDays < 30) b.class = 'fast';
         else if (b.turnoverDays < 90) b.class = 'medium';
         else b.class = 'slow';
     });
     
     brands.sort((a, b) => {
+        if (Boolean(a.invalidStock) !== Boolean(b.invalidStock)) return a.invalidStock ? -1 : 1;
+        if (a.invalidStock && b.invalidStock) return a.brand.localeCompare(b.brand, 'ru');
         if (a.turnoverDays === Infinity && b.turnoverDays === Infinity) return b.sold30 - a.sold30;
         if (a.turnoverDays === Infinity) return 1;
         if (b.turnoverDays === Infinity) return -1;
@@ -1068,9 +1074,10 @@ function renderTurnoverContent() {
             ${brands.map(b => `
                 <div class="brand-card ${b.class}">
                     <div class="brand-name">${b.brand}</div>
+                    ${b.invalidStock ? '<div class="stock-warning" role="status">Проверьте остатки: у товаров бренда есть некорректные значения</div>' : ''}
                     <div class="brand-stats">
                         <div class="brand-stat">
-                            <div class="brand-stat-value">${b.turnoverDays === Infinity ? '–' : b.turnoverDays + ' дн.'}</div>
+                            <div class="brand-stat-value">${b.turnoverDays == null || b.turnoverDays === Infinity ? '–' : b.turnoverDays + ' дн.'}</div>
                             <div class="brand-stat-label">Оборачив.</div>
                         </div>
                         <div class="brand-stat">
@@ -1078,7 +1085,7 @@ function renderTurnoverContent() {
                             <div class="brand-stat-label">В день</div>
                         </div>
                         <div class="brand-stat">
-                            <div class="brand-stat-value">${b.stock}</div>
+                            <div class="brand-stat-value">${b.invalidStock ? '–' : b.stock}</div>
                             <div class="brand-stat-label">Остаток</div>
                         </div>
                         <div class="brand-stat">

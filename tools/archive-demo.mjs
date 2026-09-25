@@ -8,7 +8,7 @@ import { archiveFixture } from '../tests/archive-fixture.mjs';
 export async function demoServer(port = 0, { automatic = true } = {}) {
     let html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
     html = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<link\b[^>]*href="https:[^"]*"[^>]*>/gi, '');
-    const scripts = ['auth', 'product-lifecycle', 'archive-operations', 'stock-operations', 'database', 'ui', 'app'];
+    const scripts = ['release', 'auth', 'product-lifecycle', 'archive-operations', 'stock-operations', 'database', 'ui', 'app'];
     const bootstrap = `<script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js';
         import * as sdk from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js';

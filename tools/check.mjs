@@ -90,6 +90,8 @@ try {
     await run(process.execPath, ["tests/stock-regression.mjs"]);
   if (!process.argv.includes("--stock-only") && !process.argv.includes("--condition-only"))
     await run(process.execPath, ["tests/archive-browser.mjs"]);
+  if (!process.argv.includes("--stock-only") && !process.argv.includes("--condition-only"))
+    await run(process.execPath, ["tests/stock-correction-browser.mjs"]);
 } finally {
   if (started) await run("docker", ["stop", container]);
 }

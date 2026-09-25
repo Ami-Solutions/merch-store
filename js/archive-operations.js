@@ -23,6 +23,7 @@ window.archiveOperations = (() => {
     }
     async function transact(work) {
         const generation = window.authGeneration || 0;
+        if (await window.adminRelease?.check()) fail('Доступна новая версия админки. Сохраните данные открытой формы и обновите страницу перед сохранением');
         for (let attempt = 0; attempt < 3; attempt++) {
             let observed;
             try {
